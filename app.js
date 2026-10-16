@@ -221,7 +221,7 @@ function routeOf(e){return {dest:(e.address||e.place||"").trim(),origin:e.cat===
 function navURL(app,r,preview){
   if(app==="waze")return `https://waze.com/ul?q=${q(r.dest)}&navigate=yes`;
   if(app==="apple")return `https://maps.apple.com/?daddr=${q(r.dest)}&dirflg=d${r.origin?`&saddr=${q(r.origin)}`:""}`;
-  return `https://www.google.com/maps/dir/?api=1&destination=${q(r.dest)}&travelmode=driving${preview?"":"&dir_action=navigate"}${r.origin?`&origin=${q(r.origin)}`:""}${r.stops&&r.stops.length?`&waypoints=${r.stops.map(q).join("%7C")}`:""}`}
+  return `https://www.google.com/maps/dir/?api=1&hl=ko&destination=${q(r.dest)}&travelmode=driving${preview?"":"&dir_action=navigate"}${r.origin?`&origin=${q(r.origin)}`:""}${r.stops&&r.stops.length?`&waypoints=${r.stops.map(q).join("%7C")}`:""}`}
 function navLinks(e){const r=routeOf(e);if(!r.dest)return `<p class="hint">장소나 주소를 넣으면 내비 버튼이 생겨요.</p>`;const pref=prefs.nav||"google";
   return `<a class="navgo" href="${navURL(pref,r)}" target="_blank" rel="noopener">🚗 ${NAVN[pref]}로 안내 시작</a>
   <a href="${navURL("google",r,true)}" target="_blank" rel="noopener">경로 미리보기</a>
@@ -475,7 +475,7 @@ function openDrawer(id){
       </div>
       <div class="card">
         <h3>근처 맛집 <span class="row"><button class="btn sm" data-act="pasteRest">붙여넣기</button><button class="btn sm" data-act="addRest">+ 추가</button></span></h3>
-        ${(e.address||e.place)?`<div class="navrow"><a href="https://www.google.com/maps/search/?api=1&query=${q("restaurants near "+(e.address||e.place))}" target="_blank" rel="noopener">Google 지도에서 근처 맛집 찾기</a></div>`:""}
+        ${(e.address||e.place)?`<div class="navrow"><a href="https://www.google.com/maps/search/?api=1&hl=ko&query=${q("restaurants near "+(e.address||e.place))}" target="_blank" rel="noopener">Google 지도에서 근처 맛집 찾기</a></div>`:""}
         <div id="restList" style="display:flex;flex-direction:column;gap:10px">${restListHTML(e)}</div>
       </div>
       <div class="row" style="justify-content:space-between">
@@ -504,7 +504,7 @@ function restListHTML(e){
       <button class="btn sm ghost" data-act="editRest" data-id="${r.id}">수정</button></div>
     ${r.menu?.length?`<table class="menu"><tbody>${r.menu.map(m=>`<tr><td>${esc(m.name)}</td><td>${esc(m.price)}</td></tr>`).join("")}</tbody></table>`:""}
     ${r.note?`<div class="hint">${esc(r.note)}</div>`:""}
-    <div class="navrow"><a href="https://www.google.com/maps/search/?api=1&query=${q(r.name+" "+(r.address||e.address||e.place||""))}" target="_blank" rel="noopener">지도에서 보기</a><a href="https://www.google.com/maps/dir/?api=1&destination=${q(r.name+" "+(r.address||e.address||e.place||""))}" target="_blank" rel="noopener">길찾기</a></div>
+    <div class="navrow"><a href="https://www.google.com/maps/search/?api=1&hl=ko&query=${q(r.name+" "+(r.address||e.address||e.place||""))}" target="_blank" rel="noopener">지도에서 보기</a><a href="https://www.google.com/maps/dir/?api=1&hl=ko&destination=${q(r.name+" "+(r.address||e.address||e.place||""))}" target="_blank" rel="noopener">길찾기</a></div>
   </div>`).join("");
 }
 function closeDrawer(fromPop){if(!openEv)return;flushPatches();openEv=null;$("#layer").innerHTML="";render();if(!fromPop&&history.state&&history.state.drawer)history.back()}
