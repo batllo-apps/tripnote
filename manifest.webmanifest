@@ -1,0 +1,17 @@
+{
+  "name": "여행 일정 노트",
+  "short_name": "여행노트",
+  "description": "일정, 기록, 사진, 예산을 폰 안에 저장하는 여행 플래너",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#EEF2F3",
+  "theme_color": "#0E6B78",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
