@@ -36,7 +36,7 @@ function applyTheme(){const r=document.documentElement;
 if(darkMQ&&darkMQ.addEventListener)darkMQ.addEventListener("change",applyTheme);
 const CFG=window.FIREBASE_CONFIG||{};
 let fs=null, auth=null, myUid=null;
-let T=null, L=null, curId=null, curDay=null, view="plan", openEv=null;
+let T=null, L=null, curId=null, curDay=null, view="plan", openEv=null, pf="";
 let locals={};
 let unsubs=[], pend={}, installEvt=null, needsRender=false;
 
@@ -208,6 +208,9 @@ const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.get
 function fmtDate(iso,long){if(!iso)return "";const d=new Date(iso+"T12:00:00");const m=d.getMonth()+1,dd=d.getDate();return long?`${d.getFullYear()}.${String(m).padStart(2,"0")}.${String(dd).padStart(2,"0")} (${WD[d.getDay()]})`:`${m}/${dd} ${WD[d.getDay()]}`}
 function daysBetween(a,b){const out=[];const d=new Date(a+"T12:00:00");const e=new Date(b+"T12:00:00");let g=0;while(d<=e&&g<60){out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);d.setDate(d.getDate()+1);g++}return out}
 const evsOf=(t,dayId)=>t.events.filter(e=>e.dayId===dayId).sort((a,b)=>(a.start||"99").localeCompare(b.start||"99"));
+const inEv=(e,pid)=>!pid||!e.with||e.with.includes(pid);
+const evsVis=(t,dayId)=>evsOf(t,dayId).filter(e=>inEv(e,pf));
+function setPf(id){pf=id||"";try{localStorage.setItem("tripnote:pf:"+curId,pf)}catch(e){}}
 const q=s=>encodeURIComponent(s);
 const money=(n,t)=>{t=t||T;const v=Number(n)||0;return (t.currency||"")+v.toLocaleString(undefined,{minimumFractionDigits:v%1?2:0,maximumFractionDigits:2})};
 const initial=n=>esc((n||"?").trim().slice(0,1).toUpperCase());
@@ -227,10 +230,10 @@ function navLinks(e){const r=routeOf(e);if(!r.dest)return `<p class="hint">장�
   <a href="${navURL("google",r,true)}" target="_blank" rel="noopener">경로 미리보기</a>
   ${Object.keys(NAVN).filter(k=>k!==pref).map(k=>`<a href="${navURL(k,r)}" target="_blank" rel="noopener">${NAVN[k]}</a>`).join("")}
   ${(r.stops.length||r.origin)&&pref!=="google"?`<p class="hint" style="width:100%">출발지·경유지는 Google 지도에서만 함께 들어가요.</p>`:""}`}
-function orderedEvents(t){const di=Object.fromEntries(t.days.map((d,i)=>[d.id,i]));return t.events.filter(e=>e.status!=="hold"&&di[e.dayId]!=null).sort((a,b)=>(di[a.dayId]-di[b.dayId])||(a.start||"99").localeCompare(b.start||"99"))}
+function orderedEvents(t){const di=Object.fromEntries(t.days.map((d,i)=>[d.id,i]));return t.events.filter(e=>e.status!=="hold"&&di[e.dayId]!=null&&inEv(e,pf||(L&&L.me))).sort((a,b)=>(di[a.dayId]-di[b.dayId])||(a.start||"99").localeCompare(b.start||"99"))}
 function nextEvent(e){const list=orderedEvents(T);const i=list.findIndex(x=>x.id===e.id);for(let k=i+1;k<list.length;k++){if(list[k].status!=="done"&&routeOf(list[k]).dest)return list[k]}return null}
 function goNextHTML(e){const n=nextEvent(e);if(!n)return "";const r=routeOf(n);r.origin="";return `<a class="nextgo" href="${navURL(prefs.nav||"google",r)}" target="_blank" rel="noopener">🚗 다음 장소로 출발 · ${esc(n.title)}${n.dayId!==e.dayId?` <span class="hint">(${fmtDate(T.days.find(d=>d.id===n.dayId)?.date)})</span>`:""}</a>`}
-function dayRouteHTML(t,d){const rem=evsOf(t,d.id).filter(e=>e.status==="todo"&&routeOf(e).dest);if(rem.length<2)return "";
+function dayRouteHTML(t,d){const rem=evsOf(t,d.id).filter(e=>inEv(e,pf||(L&&L.me))).filter(e=>e.status==="todo"&&routeOf(e).dest);if(rem.length<2)return "";
   const pts=rem.slice(0,4).map(e=>routeOf(e).dest);const r={dest:pts[pts.length-1],origin:"",stops:pts.slice(0,-1)};
   return `<a class="btn sm dayroute" href="${navURL("google",r,true)}" target="_blank" rel="noopener">🗺 남은 일정 ${pts.length}곳 한 번에 경로</a>`}
 function stopsHTML(e){return (e.stops||[]).map((x,i)=>`<div class="addline"><input class="inp" data-stop="${i}" value="${esc(x)}" placeholder="경유지 ${i+1} (주유소, 휴게소 등)"><button type="button" class="btn sm ghost" data-act="rmStop" data-i="${i}" aria-label="경유지 삭제">✕</button></div>`).join("")}
@@ -296,8 +299,9 @@ function renderTripSel(){
 }
 
 function planHTML(t){
-  const holdEvs=t.events.filter(e=>e.status==="hold");
-  const tabs=t.days.map((d,i)=>{const ev=evsOf(t,d.id);return `<button class="tab" role="tab" aria-selected="${curDay===d.id}" data-act="day" data-id="${d.id}">
+  const holdEvs=t.events.filter(e=>e.status==="hold"&&inEv(e,pf));
+  if(pf&&!t.people.some(p=>p.id===pf))pf="";
+  const tabs=t.days.map((d,i)=>{const ev=evsVis(t,d.id);return `<button class="tab" role="tab" aria-selected="${curDay===d.id}" data-act="day" data-id="${d.id}">
     <span class="d">${fmtDate(d.date)}${d.date===todayISO()?" · 오늘":""}</span><span class="n">${d.emoji?d.emoji+" ":""}Day ${i+1}</span>
     <span class="dots">${ev.slice(0,10).map(e=>`<i class="${e.status}"></i>`).join("")}</span></button>`}).join("")
     +`<button class="tab holdbox" role="tab" aria-selected="${curDay==="hold"}" data-act="day" data-id="hold"><span class="d">모아보기</span><span class="n">보류 ${holdEvs.length}</span><span class="dots"></span></button>`;
@@ -307,16 +311,23 @@ function planHTML(t){
     <p class="hint">보류한 일정은 여기 모입니다. 열어서 다른 날로 옮기거나 다시 예정으로 돌릴 수 있어요.</p>
     <div class="timeline">${holdEvs.length?holdEvs.map(e=>evHTML(e,true)).join(""):`<div class="empty"><p>보류한 일정이 없어요.</p></div>`}</div>`;
   }else{
-    const d=t.days.find(x=>x.id===curDay);const idx=t.days.indexOf(d);const ev=evsOf(t,d.id);
+    const d=t.days.find(x=>x.id===curDay);const idx=t.days.indexOf(d);const ev=evsVis(t,d.id);
     const daySpent=sum(t.expenses.filter(x=>x.dayId===d.id));
     body=`<div class="dayhead"><div style="flex:1;min-width:0"><span class="eyebrow">Day ${idx+1} · ${fmtDate(d.date,true)}${daySpent?` · 지출 ${money(daySpent,t)}`:""}</span>
       <div class="titlerow"><button type="button" class="emo" data-act="dayEmoji" aria-label="이날 이모지">${d.emoji||"＋"}</button><input id="dayTitle" aria-label="이날 제목" placeholder="이날의 테마 (예: 시내 걷기)" value="${esc(d.title||"")}"></div>
       ${dayRouteHTML(t,d)}</div></div>
-      <div class="timeline">${ev.map(e=>evHTML(e)).join("")}
-      <button class="add-ev" data-act="addEv">+ 이 날에 일정 추가</button></div>`;
+      <div class="timeline">${timelineHTML(ev)||(pf?`<div class="empty"><p>${esc(pName(t,pf))} 일정이 이날은 없어요.</p></div>`:"")}
+      <button class="add-ev" data-act="addEv">+ 이 날에 일정 추가${pf?` (${esc(pName(t,pf))})`:""}</button></div>`;
   }
-  return `<nav class="tabs" role="tablist" aria-label="날짜">${tabs}</nav>${legend()}${body}`;
+  const pfRow=t.people.length>1?`<div class="pfilter" role="group" aria-label="누구 일정 보기"><span class="hint">보기</span><button type="button" data-act="pf" data-id="" aria-pressed="${!pf}">모두</button>${t.people.map(p=>`<button type="button" data-act="pf" data-id="${p.id}" aria-pressed="${pf===p.id}"><b>${initial(p.name)}</b>${esc(p.name)}${p.id===L.me?" (나)":""}</button>`).join("")}</div>`:"";
+  return `<nav class="tabs" role="tablist" aria-label="날짜">${tabs}</nav>${pfRow}${legend()}${body}`;
 }
+const toMin=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(t||"");return m?(+m[1])*60+(+m[2]):null};
+function timelineHTML(ev){
+  const groups=[];let cur=null,curEnd=-1;
+  ev.forEach(e=>{const st=toMin(e.start);let en=toMin(e.end);if(st==null){groups.push([e]);cur=null;return}if(en==null||en<=st)en=st+60;
+    if(cur&&st<curEnd){cur.push(e);curEnd=Math.max(curEnd,en)}else{cur=[e];groups.push(cur);curEnd=en}});
+  return groups.map(g=>g.length<2?evHTML(g[0]):`<div class="par"><div class="par-head">⏱ ${esc(g[0].start)} 같은 시간 · ${g.length}개 일정</div>${g.map(e=>evHTML(e)).join("")}</div>`).join("")}
 function evHTML(e,showDay){
   const t=T;const day=t.days.find(d=>d.id===e.dayId);
   const tags=[];const nr=(e.restaurants||[]).length,np=photosOf(e.id).length,nn=allNotes("ev-"+e.id).length;
@@ -328,7 +339,7 @@ function evHTML(e,showDay){
     <div class="ev-body">
       <div class="ev-top"><button class="ev-title" data-act="open" data-id="${e.id}">${esc(e.title||"제목 없음")}</button><span class="chip ${e.status}">${ST[e.status]}</span></div>
       ${e.place?`<div class="ev-place">${esc(e.place)}</div>`:""}
-      <div class="ev-tags"><span class="cchip cat-${e.cat}">${CATS[e.cat]}</span>${tags.map(x=>`<span>${esc(x)}</span>`).join("")}</div>
+      <div class="ev-tags"><span class="cchip cat-${e.cat}">${CATS[e.cat]}</span>${e.with&&t.people.length&&e.with.length<t.people.length?`<span class="who">👤 ${esc(e.with.map(id=>pName(t,id)).filter(Boolean).join(", ")||"정하지 않음")}</span>`:""}${tags.map(x=>`<span>${esc(x)}</span>`).join("")}</div>
       <div class="ev-actions">
         <button class="st-btn done" aria-pressed="${e.status==="done"}" data-act="status" data-s="done" data-id="${e.id}">✓ 완료</button>
         <button class="st-btn hold" aria-pressed="${e.status==="hold"}" data-act="status" data-s="hold" data-id="${e.id}">보류</button>
@@ -449,6 +460,7 @@ function openDrawer(id){
       <div class="card">
         <div class="field"><label for="f-title">일정</label><input class="inp" id="f-title" data-f="title" value="${esc(e.title)}"></div>
         <div class="field"><label>카테고리</label><div id="evCat">${catPick(e.cat,"evCat")}</div></div>
+        ${t.people.length?`<div class="field"><label>누구 일정인가요? <span class="hint">눌러서 빼거나 넣어요 · 모두 보여요</span></label><div class="people" id="withRow">${withChips(t,e)}</div></div>`:""}
         <div class="grid3">
           <div class="field"><label for="f-start">시작</label><input class="inp mono" type="time" id="f-start" data-f="start" value="${esc(e.start)}"></div>
           <div class="field"><label for="f-end">종료</label><input class="inp mono" type="time" id="f-end" data-f="end" value="${esc(e.end)}"></div>
@@ -463,7 +475,6 @@ function openDrawer(id){
       </div>
       <div class="card">
         <h3>내 기록 <span id="visBox">${visPick(key,mn.shared)}</span></h3>
-        ${t.people.length?`<div class="field"><label>함께한 사람</label><div class="people" id="withRow">${withChips(t,e)}</div></div>`:""}
         <div class="field"><label for="n-mood">한 줄 감정 · 평가</label><input class="inp" id="n-mood" data-note="mood" data-k="${key}" value="${esc(mn.mood)}" placeholder="예: 최고였음, 또 오고 싶다"></div>
         <div class="field"><label for="n-diary">일기</label><textarea class="inp" id="n-diary" data-note="diary" data-k="${key}" rows="4" placeholder="무엇을 보고, 먹고, 느꼈는지">${esc(mn.diary)}</textarea></div>
         <div class="field"><label>사진 <span class="hint">이 폰에 저장돼요</span></label><div class="photos" id="photoGrid">${photosHTML(e)}</div></div>
@@ -616,7 +627,7 @@ async function createTrip(o,tid){
   b.set(FB.doc(fs,"trips",tid),{name:o.name||"새 여행",destination:o.destination||"",start:o.start,end:o.end,currency:o.currency||"$",budget:Number(o.budget)||0,days,dayTitles:titles,dayEmoji:emo,theme:THEMES[o.theme]?o.theme:"teal",people,createdBy:myUid,owners:[myUid],viewers:[],members:meId?{[myUid]:meId}:{},createdAt:Date.now(),updatedAt:Date.now(),example:!!o.example});
   const ck=(o.checklist&&o.checklist.length?o.checklist.map(c=>[PREP[c.cat]?c.cat:"etc",String(c.text||c),!!c.done]):DEFAULT_CK);
   ck.forEach(([c,x,dn],i)=>{b.set(FB.doc(fs,"trips",tid,"checklist","c"+uid()),{cat:c,text:x,done:!!dn,order:i});ops++});
-  (o.days||[]).forEach(d=>{const did=byDate[d.date];if(!did)return;(d.events||[]).forEach(e=>{if(ops>480)return;b.set(FB.doc(fs,"trips",tid,"events","e"+uid()),evFrom(e,did));ops++})});
+  (o.days||[]).forEach(d=>{const did=byDate[d.date];if(!did)return;(d.events||[]).forEach(e=>{if(ops>480)return;b.set(FB.doc(fs,"trips",tid,"events","e"+uid()),evFrom(e,did,people));ops++})});
   (o.expenses||[]).forEach(x=>{b.set(FB.doc(fs,"trips",tid,"expenses","x"+uid()),{title:x.title||"",amount:Number(x.amount)||0,cat:CATS[x.cat]?x.cat:"etc",dayId:byDate[x.date]||"",paidBy:people[x.paidByIndex]?.id||"",memo:x.memo||"",evId:"",receiptBy:"",createdAt:Date.now(),by:""});ops++});
   w(b.commit());
   locals[tid]=newLocal(tid,{name:o.name,start:o.start,me:meId});putLocal(locals[tid]);
@@ -624,7 +635,7 @@ async function createTrip(o,tid){
   if(!o.example)toast("여행을 만들었어요. 준비 탭에서 초대 링크를 보내세요");
   return tid;
 }
-function selectTrip(tid){flushAll();curId=tid;L=tid?locals[tid]:null;curDay=null;openEv=null;$("#layer").innerHTML="";try{localStorage.setItem("tripnote:cur",tid||"")}catch(_){}if(tid)subscribe(tid);else{unsubs.forEach(u=>u());unsubs=[];T=null}render()}
+function selectTrip(tid){flushAll();curId=tid;L=tid?locals[tid]:null;curDay=null;pf="";try{pf=localStorage.getItem("tripnote:pf:"+tid)||""}catch(e){}openEv=null;$("#layer").innerHTML="";try{localStorage.setItem("tripnote:cur",tid||"")}catch(_){}if(tid)subscribe(tid);else{unsubs.forEach(u=>u());unsubs=[];T=null}render()}
 function joinModal(prefill){
   const m=modal(`<form class="card"><h3>초대 코드로 참여</h3>
     <div class="field"><label for="j-code">초대 코드</label><input class="inp mono" id="j-code" autocomplete="off" autocapitalize="off" placeholder="xxxx-xxxx-xxxx" value="${esc(prefill?fmtCode(prefill):"")}"></div>
@@ -672,7 +683,7 @@ function journalModal(dayId){
 const FORMAT_HINT=`'여행 일정 노트' 앱에 붙여넣을 수 있게 JSON으로만 답해줘. 코드블록 하나에 아래 형식 그대로.
 일정 전체일 때:
 {"type":"tripnote","name":"여행 이름","destination":"도시","start":"YYYY-MM-DD","end":"YYYY-MM-DD","people":["나","엄마"],
- "days":[{"date":"YYYY-MM-DD","title":"이날 테마","emoji":"🚢","events":[{"start":"HH:MM","end":"HH:MM","title":"일정","cat":"stay|sight|food|move|shop|etc","place":"장소(이동이면 도착지) 이름","address":"주소","origin":"이동 일정의 출발지(없으면 생략)","stops":["경유지"],"memo":"메모",
+ "days":[{"date":"YYYY-MM-DD","title":"이날 테마","emoji":"🚢","events":[{"start":"HH:MM","end":"HH:MM","title":"일정","cat":"stay|sight|food|move|shop|etc","place":"장소(이동이면 도착지) 이름","address":"주소","origin":"이동 일정의 출발지(없으면 생략)","stops":["경유지"],"with":["이 일정에 참여하는 사람 이름 (모두면 생략)"],"memo":"메모",
    "restaurants":[{"name":"식당","cuisine":"종류","rating":4.5,"ratingSource":"Google","price":"$$","distance":"도보 5분","address":"주소","menu":[{"name":"메뉴","price":"$12"}],"note":"팁"}]}]}],
  "checklist":[{"cat":"doc|book|pack|etc","text":"준비할 것"}]}
 맛집만일 때: [{"name":...,"cuisine":...,"rating":...,"ratingSource":...,"price":...,"distance":...,"address":...,"menu":[...],"note":...}]`;
@@ -682,7 +693,8 @@ function parseLoose(text){
   s=s.slice(i);const close=s[0]==="{"?"}":"]";s=s.slice(0,s.lastIndexOf(close)+1);return JSON.parse(s);
 }
 const restFrom=r=>({id:uid(),name:String(r.name||""),cuisine:String(r.cuisine||""),rating:r.rating==null?"":String(r.rating),ratingSource:String(r.ratingSource||""),price:String(r.price||""),distance:String(r.distance||""),address:String(r.address||""),note:String(r.note||""),menu:(Array.isArray(r.menu)?r.menu:[]).map(m=>({name:String(m.name||""),price:String(m.price||"")})).filter(m=>m.name)});
-const evFrom=(e,dayId)=>({dayId,start:String(e.start||""),end:String(e.end||""),title:String(e.title||"일정"),cat:CATS[e.cat]?e.cat:"etc",place:String(e.place||""),address:String(e.address||""),memo:String(e.memo||""),origin:String(e.origin||""),stops:(Array.isArray(e.stops)?e.stops:[]).map(String).slice(0,8),status:ST[e.status]?e.status:"todo",restaurants:(Array.isArray(e.restaurants)?e.restaurants:[]).map(restFrom).filter(r=>r.name),createdAt:Date.now()});
+const withFrom=(e,pl)=>{if(!Array.isArray(e.with)||!pl||!pl.length)return {};const ids=e.with.map(n=>(pl.find(p=>p.name===String(n).trim())||{}).id).filter(Boolean);return ids.length&&ids.length<pl.length?{with:ids}:{}};
+const evFrom=(e,dayId,pl)=>({...withFrom(e,pl),dayId,start:String(e.start||""),end:String(e.end||""),title:String(e.title||"일정"),cat:CATS[e.cat]?e.cat:"etc",place:String(e.place||""),address:String(e.address||""),memo:String(e.memo||""),origin:String(e.origin||""),stops:(Array.isArray(e.stops)?e.stops:[]).map(String).slice(0,8),status:ST[e.status]?e.status:"todo",restaurants:(Array.isArray(e.restaurants)?e.restaurants:[]).map(restFrom).filter(r=>r.name),createdAt:Date.now()});
 function pasteModal(){
   const m=modal(`<form class="card" style="max-height:92vh;overflow-y:auto">
     <h3>Claude가 만든 내용 붙여넣기</h3>
@@ -709,7 +721,7 @@ function pasteModal(){
       if(b.dataset.pick==="new"){closeModalEl(m);await createTrip({...o,start,end,meIndex:0});toast(`일정 ${nEv}개를 넣었어요`);return}
       let added=0,skipped=0;const bt=FB.writeBatch(fs);const titles={};
       (o.days||[]).forEach(d=>{const td=T.days.find(x=>x.date===d.date);if(!td){skipped+=(d.events||[]).length;return}if(d.title&&!td.title)titles["dayTitles."+td.id]=String(d.title);if(d.emoji&&!td.emoji)titles["dayEmoji."+td.id]=String(d.emoji).slice(0,8);
-        (d.events||[]).forEach(e=>{bt.set(ref.d("events","e"+uid()),evFrom(e,td.id));added++})});
+        (d.events||[]).forEach(e=>{bt.set(ref.d("events","e"+uid()),evFrom(e,td.id,T.people));added++})});
       (o.checklist||[]).forEach((c,i)=>bt.set(ref.d("checklist","c"+uid()),{cat:PREP[c.cat]?c.cat:"etc",text:String(c.text||c),done:false,order:Date.now()+i}));
       if(Object.keys(titles).length)bt.update(ref.trip(),titles);
       w(bt.commit());closeModalEl(m);toast(`일정 ${added}개를 넣었어요`+(skipped?` (여행 기간 밖 ${skipped}개 제외)`:""));
@@ -929,7 +941,7 @@ document.addEventListener("click",async ev=>{
     case "shareInvite":{const txt=`'${t.name}' 여행에 초대해요.\n안드로이드: 링크를 Chrome으로 열고 ⋮ → 앱 설치\n아이폰: 링크를 Safari로 열고 공유 → 홈 화면에 추가 → 홈 화면 아이콘으로 열어서 '초대 코드로 참여'에 코드 입력\n초대 코드: ${fmtCode(curId)}`;
       if(navigator.share){navigator.share({title:t.name,text:txt,url:inviteLink()}).catch(()=>{})}else{const ok=await navigator.clipboard?.writeText(txt+"\n"+inviteLink()).then(()=>true,()=>false);toast(ok?"초대 문구를 복사했어요":"복사하지 못했어요")}break}
     case "copyCode":{const ok=await navigator.clipboard?.writeText(fmtCode(curId)).then(()=>true,()=>false);toast(ok?"코드를 복사했어요":"복사하지 못했어요");break}
-    case "addEv":{const last=evsOf(t,curDay).slice(-1)[0];const id="e"+uid();const nx=last?(last.end||(()=>{const [h,mi]=(last.start||"09:00").split(":").map(Number);return `${String(Math.min(23,(h||9)+1)).padStart(2,"0")}:${String(mi||0).padStart(2,"0")}`})()):"09:00";w(FB.setDoc(ref.d("events",id),{dayId:curDay,start:nx,end:"",title:"새 일정",cat:"sight",place:"",address:"",memo:"",status:"todo",restaurants:[],createdAt:Date.now()}));
+    case "addEv":{const last=evsVis(t,curDay).slice(-1)[0];const id="e"+uid();const nx=last?(last.end||(()=>{const [h,mi]=(last.start||"09:00").split(":").map(Number);return `${String(Math.min(23,(h||9)+1)).padStart(2,"0")}:${String(mi||0).padStart(2,"0")}`})()):"09:00";w(FB.setDoc(ref.d("events",id),{dayId:curDay,start:nx,end:"",title:"새 일정",cat:"sight",place:"",address:"",memo:"",status:"todo",restaurants:[],...(pf?{with:[pf]}:{}),createdAt:Date.now()}));
       setTimeout(()=>{openDrawer(id);const i=$("#f-title");i&&(i.focus(),i.select())},150);break}
     case "open":openDrawer(b.dataset.id);break;
     case "close":closeDrawer();break;
@@ -942,6 +954,7 @@ document.addEventListener("click",async ev=>{
     case "rmStop":{const e=curEv();e.stops=(e.stops||[]).filter((_,i)=>i!==+b.dataset.i);patchEv(e.id,{stops:e.stops});$("#stopsBox").innerHTML=stopsHTML(e);$("#navRow").innerHTML=navLinks(e);break}
     case "dayEmoji":emojiModal(curDay);break;
     case "roles":rolesModal();break;
+    case "pf":setPf(b.dataset.id);render();break;
     case "setRole":{if(!isOwner())break;const pid=b.dataset.p,r=b.dataset.r;const u=uidsOf(pid);if(!u.length)break;
       const owners=new Set(T.owners),viewers=new Set(T.viewers);u.forEach(x=>{owners.delete(x);viewers.delete(x)});if(r==="owner")u.forEach(x=>owners.add(x));if(r==="viewer")u.forEach(x=>viewers.add(x));
       if(!owners.size){toast("주인이 최소 한 명은 있어야 해요");break}

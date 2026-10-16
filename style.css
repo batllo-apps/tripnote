@@ -318,3 +318,16 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 .ro .rc[data-act=editExp]{display:flex!important;visibility:hidden}
 .ro [data-act=evCat],.ro [data-act=toggleWith],.ro [data-act=ck],.ro #dayTitle,.ro #budgetIn,.ro #curIn,.ro .drawer [data-f],.ro [data-stop],.ro [data-act=setTheme]{pointer-events:none}
 .ro [data-act=setTheme]{opacity:.55}
+
+/* person filter */
+.pfilter{display:flex;gap:6px;align-items:center;overflow-x:auto;padding:4px 2px 8px;scrollbar-width:thin}
+.pfilter .hint{flex:none}
+.pfilter button{flex:none;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:3px 11px 3px 4px;font-size:13px;font-weight:500}
+.pfilter button:first-of-type{padding-left:11px}
+.pfilter button b{width:20px;height:20px;border-radius:50%;background:var(--accent-soft);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;font-size:11px}
+.pfilter button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.ev-tags .who{background:var(--accent-soft);color:var(--accent);font-weight:600}
+
+/* parallel events */
+.par{display:flex;flex-direction:column;gap:8px;border:1.5px dashed color-mix(in srgb,var(--accent) 45%,transparent);border-radius:16px;padding:8px;background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
+.par-head{font-size:12px;font-weight:600;color:var(--accent);padding:0 4px}
