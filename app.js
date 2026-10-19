@@ -126,6 +126,12 @@ const ref={
   d:(c,id,tid)=>FB.doc(fs,"trips",tid||curId,c,id)};
 function errMsg(e){const c=e&&e.code||"";if(c.includes("permission"))return "권한이 없어요. 초대 코드를 다시 확인해 주세요.";if(c.includes("resource-exhausted"))return "오늘 무료 사용량을 넘었어요. 내일 다시 동기화돼요.";if(c.includes("unavailable"))return "서버에 연결할 수 없어요. 연결되면 다시 시도해요.";return "저장하지 못했어요"}
 function w(p){return p.catch(e=>{console.error(e);toast(errMsg(e))})}
+// 보안 규칙은 묶음(batch) 하나에 문서 확인을 20번까지만 허용해요. 하위 문서 쓰기 하나가 2번씩 쓰니 8개씩 나눠 보내요.
+// 모든 묶음을 바로 줄 세워 두므로(오프라인이어도) 순서대로 올라가요.
+function chunkedBatch(size=8){const parts=[];let b=null,n=0;
+  const add=f=>{if(!b||n>=size){b=FB.writeBatch(fs);parts.push(b);n=0}f(b);n++};
+  return {set:(r,d,o)=>add(x=>o?x.set(r,d,o):x.set(r,d)),update:(r,d)=>add(x=>x.update(r,d)),delete:r=>add(x=>x.delete(r)),
+    commit:()=>Promise.all(parts.map(x=>x.commit()))}}
 const clean=o=>JSON.parse(JSON.stringify(o));
 const patches={ev:new Map(),trip:{}};let patchTimer=null;
 function patchEv(id,obj){patches.ev.set(id,Object.assign(patches.ev.get(id)||{},obj));schedulePatch()}
@@ -623,7 +629,7 @@ async function createTrip(o,tid){
   const byDate=Object.fromEntries(days.map(d=>[d.date,d.id]));
   const emo={};(o.days||[]).forEach(d=>{const did=byDate[d.date];if(did&&d.title)titles[did]=String(d.title);if(did&&d.emoji)emo[did]=String(d.emoji).slice(0,8)});
   const meId=o.meIndex!=null&&people[o.meIndex]?people[o.meIndex].id:"";
-  const b=FB.writeBatch(fs);let ops=1;
+  const b=chunkedBatch();let ops=1;
   b.set(FB.doc(fs,"trips",tid),{name:o.name||"새 여행",destination:o.destination||"",start:o.start,end:o.end,currency:o.currency||"$",budget:Number(o.budget)||0,days,dayTitles:titles,dayEmoji:emo,theme:THEMES[o.theme]?o.theme:"teal",people,createdBy:myUid,owners:[myUid],viewers:[],members:meId?{[myUid]:meId}:{},createdAt:Date.now(),updatedAt:Date.now(),example:!!o.example});
   const ck=(o.checklist&&o.checklist.length?o.checklist.map(c=>[PREP[c.cat]?c.cat:"etc",String(c.text||c),!!c.done]):DEFAULT_CK);
   ck.forEach(([c,x,dn],i)=>{b.set(FB.doc(fs,"trips",tid,"checklist","c"+uid()),{cat:c,text:x,done:!!dn,order:i});ops++});
@@ -719,7 +725,7 @@ function pasteModal(){
     btns.innerHTML=`<button type="button" class="btn" data-act="closeModal">취소</button>${T&&!isViewer()?`<button type="button" class="btn" data-pick="merge">현재 여행에 추가</button>`:""}<button type="button" class="btn primary" data-pick="new">새 여행으로 만들기</button>`;
     btns.querySelectorAll("[data-pick]").forEach(b=>b.onclick=async()=>{
       if(b.dataset.pick==="new"){closeModalEl(m);await createTrip({...o,start,end,meIndex:0});toast(`일정 ${nEv}개를 넣었어요`);return}
-      let added=0,skipped=0;const bt=FB.writeBatch(fs);const titles={};
+      let added=0,skipped=0;const bt=chunkedBatch();const titles={};
       (o.days||[]).forEach(d=>{const td=T.days.find(x=>x.date===d.date);if(!td){skipped+=(d.events||[]).length;return}if(d.title&&!td.title)titles["dayTitles."+td.id]=String(d.title);if(d.emoji&&!td.emoji)titles["dayEmoji."+td.id]=String(d.emoji).slice(0,8);
         (d.events||[]).forEach(e=>{bt.set(ref.d("events","e"+uid()),evFrom(e,td.id,T.people));added++})});
       (o.checklist||[]).forEach((c,i)=>bt.set(ref.d("checklist","c"+uid()),{cat:PREP[c.cat]?c.cat:"etc",text:String(c.text||c),done:false,order:Date.now()+i}));
@@ -870,7 +876,7 @@ async function importBackup(out){
   }catch(e){out.innerHTML=`<span style="color:var(--danger)">${esc(e.message||"불러오지 못했어요")}</span>`}
 }
 async function restoreTrip(tid,snap){
-  const b=FB.writeBatch(fs);b.set(FB.doc(fs,"trips",tid),{...snap.trip,createdBy:myUid,owners:[myUid],viewers:[],members:{...(snap.trip.members||{}),[myUid]:(locals[tid]&&locals[tid].me)||""},updatedAt:Date.now()});let n=1;
+  const b=chunkedBatch();b.set(FB.doc(fs,"trips",tid),{...snap.trip,createdBy:myUid,owners:[myUid],viewers:[],members:{...(snap.trip.members||{}),[myUid]:(locals[tid]&&locals[tid].me)||""},updatedAt:Date.now()});let n=1;
   for(const c of ["events","expenses","checklist","notes"])for(const d of snap[c]||[]){if(n>=495)break;const {id,...rest}=d;b.set(FB.doc(fs,"trips",tid,c,id),rest);n++}
   await b.commit().catch(e=>toast(errMsg(e)));
 }
@@ -914,7 +920,7 @@ async function exportJournal(out,max){
 }
 async function leaveTrip(){const tid=curId;delete locals[tid];await dbDel("local",tid).catch(()=>{});gc();const next=Object.keys(locals)[0]||null;selectTrip(next);toast("이 폰에서 여행을 지웠어요")}
 async function deleteTrip(){const tid=curId;toast("삭제하는 중…");
-  try{for(const c of ["events","expenses","checklist","notes"]){const s=await FB.getDocs(ref.col(c,tid));let b=FB.writeBatch(fs),n=0;for(const d of s.docs){b.delete(d.ref);if(++n>=450){await b.commit();b=FB.writeBatch(fs);n=0}}if(n)await b.commit()}
+  try{for(const c of ["events","expenses","checklist","notes"]){const s=await FB.getDocs(ref.col(c,tid));const b=chunkedBatch();s.docs.forEach(d=>b.delete(d.ref));await b.commit()}
     await FB.deleteDoc(ref.trip(tid));await leaveTrip();toast("여행을 삭제했어요")}catch(e){toast(errMsg(e))}}
 
 /* ================= events ================= */
