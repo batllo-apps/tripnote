@@ -57,8 +57,10 @@ function putLocal(rec){rec=rec||L;if(!rec)return;locals[rec.tid]=rec;clearTimeou
 async function flushLocal(){clearTimeout(localTimer);for(const r of Object.values(locals)){try{await dbPut("local",JSON.parse(JSON.stringify(r)))}catch(e){setStatus("이 폰에 저장하지 못했어요. 저장 공간을 확인해 주세요.")}}}
 
 /* ================= photos (this phone) ================= */
+function imgFromBlob(blob){return new Promise((ok,no)=>{const u=URL.createObjectURL(blob);const i=new Image();i.onload=()=>{URL.revokeObjectURL(u);ok(i)};i.onerror=e=>{URL.revokeObjectURL(u);no(e)};i.src=u})}
 async function resizeBlob(blob,max,q){
-  try{const bmp=await createImageBitmap(blob);const s=Math.min(1,max/Math.max(bmp.width,bmp.height));
+  try{let bmp;try{bmp=await createImageBitmap(blob,{imageOrientation:"from-image"})}catch(e){bmp=await imgFromBlob(blob)}
+    const s=Math.min(1,max/Math.max(bmp.width,bmp.height));
     if(s===1&&blob.type==="image/jpeg"&&blob.size<500000){bmp.close&&bmp.close();return blob}
     const c=document.createElement("canvas");c.width=Math.round(bmp.width*s);c.height=Math.round(bmp.height*s);
     c.getContext("2d").drawImage(bmp,0,0,c.width,c.height);bmp.close&&bmp.close();
@@ -125,7 +127,9 @@ const ref={
   col:(c,tid)=>FB.collection(fs,"trips",tid||curId,c),
   d:(c,id,tid)=>FB.doc(fs,"trips",tid||curId,c,id)};
 function errMsg(e){const c=e&&e.code||"";if(c.includes("permission"))return "권한이 없어요. 초대 코드를 다시 확인해 주세요.";if(c.includes("resource-exhausted"))return "오늘 무료 사용량을 넘었어요. 내일 다시 동기화돼요.";if(c.includes("unavailable"))return "서버에 연결할 수 없어요. 연결되면 다시 시도해요.";return "저장하지 못했어요"}
-function w(p){return p.catch(e=>{console.error(e);toast(errMsg(e))})}
+let syncErr=null,pendSince=0;
+function w(p){return p.catch(e=>{console.error(e);syncErr=errMsg(e);toast(syncErr);updStatus()})}
+setInterval(()=>{if(pendSince)updStatus()},15000);
 // 보안 규칙은 묶음(batch) 하나에 문서 확인을 20번까지만 허용해요. 하위 문서 쓰기 하나가 2번씩 쓰니 8개씩 나눠 보내요.
 // 모든 묶음을 바로 줄 세워 두므로(오프라인이어도) 순서대로 올라가요.
 function chunkedBatch(size=8){const parts=[];let b=null,n=0;
@@ -176,13 +180,20 @@ function subscribe(tid){
 let lastFromCache=false;
 function updStatus(fromCache){if(fromCache!==undefined)lastFromCache=fromCache;if(!fs)return;
   const anyPend=Object.values(pend).some(Boolean);
+  if(anyPend&&!pendSince)pendSince=Date.now();if(!anyPend)pendSince=0;
+  const stuck=navigator.onLine&&pendSince&&Date.now()-pendSince>90000;
+  syncWarn(syncErr?`⚠ 올리지 못한 내용이 있어요 (${syncErr}) 방금 바꾼 내용이 다른 사람에게 안 보일 수 있어요. 앱을 껐다 켠 뒤 다시 확인해 주세요.`
+    :stuck?"⚠ 1분 넘게 못 올라간 내용이 있어요. 인터넷이 약하거나 막혀 있어요. 내용은 이 폰에 안전하게 저장돼 있고, 연결되면 자동으로 올라가요.":"");
   setStatus(!navigator.onLine?"오프라인 · 입력한 내용은 폰에 저장되고, 연결되면 자동으로 올라가요":anyPend?"올리는 중…":lastFromCache?"연결 중…":curId?"모두와 동기화됨":"");
-  const dot=$("#syncDot");if(dot)dot.dataset.s=!navigator.onLine?"off":anyPend||lastFromCache?"busy":"ok";
+  const dot=$("#syncDot");if(dot)dot.dataset.s=syncErr||stuck?"err":!navigator.onLine?"off":anyPend||lastFromCache?"busy":"ok";
 }
 window.addEventListener("online",()=>updStatus());window.addEventListener("offline",()=>updStatus());
 function setStatus(t){$("#saveState").textContent=t}
+function syncWarn(t){let el=$("#syncWarn");if(!t){if(el)el.remove();return}
+  if(!el){el=document.createElement("div");el.id="syncWarn";el.className="syncwarn";el.setAttribute("role","alert");$(".topbar").appendChild(el)}
+  el.innerHTML=`<span>${esc(t)}</span>${syncErr?`<button type="button" class="btn sm" data-act="clearSyncErr">확인</button>`:""}`}
 function toastAction(text,label,href){document.querySelectorAll(".toast").forEach(t=>t.remove());const d=document.createElement("div");d.className="toast act";d.innerHTML=`<span>${esc(text)}</span><a href="${href}" target="_blank" rel="noopener">${esc(label)}</a><button type="button" aria-label="닫기">✕</button>`;d.querySelector("button").onclick=()=>d.remove();d.querySelector("a").onclick=()=>setTimeout(()=>d.remove(),300);document.body.appendChild(d);setTimeout(()=>d.remove(),8000)}
-function toast(t){const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2800)}
+function toast(t){document.querySelectorAll(".toast:not(.act)").forEach(x=>x.remove());const d=document.createElement("div");d.className="toast";d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),2800)}
 
 /* ================= notes (shared or private) ================= */
 const noteDraft=new Map();let noteTimer=null;
@@ -215,7 +226,7 @@ function fmtDate(iso,long){if(!iso)return "";const d=new Date(iso+"T12:00:00");c
 function daysBetween(a,b){const out=[];const d=new Date(a+"T12:00:00");const e=new Date(b+"T12:00:00");let g=0;while(d<=e&&g<60){out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);d.setDate(d.getDate()+1);g++}return out}
 const evsOf=(t,dayId)=>t.events.filter(e=>e.dayId===dayId).sort((a,b)=>(a.start||"99").localeCompare(b.start||"99"));
 const inEv=(e,pid)=>!pid||!e.with||e.with.includes(pid);
-const evsVis=(t,dayId)=>evsOf(t,dayId).filter(e=>inEv(e,pf));
+const evsVis=(t,dayId)=>evsOf(t,dayId).filter(e=>e.status!=="hold"&&inEv(e,pf));
 function setPf(id){pf=id||"";try{localStorage.setItem("tripnote:pf:"+curId,pf)}catch(e){}}
 const q=s=>encodeURIComponent(s);
 const money=(n,t)=>{t=t||T;const v=Number(n)||0;return (t.currency||"")+v.toLocaleString(undefined,{minimumFractionDigits:v%1?2:0,maximumFractionDigits:2})};
@@ -304,6 +315,25 @@ function renderTripSel(){
   s.disabled=!list.length;
 }
 
+const hhmm=m=>{m=Math.max(0,Math.min(23*60+59,m));return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
+function unholdModal(id){const t=T;const e=t.events.find(x=>x.id===id);if(!e)return;
+  const today=t.days.find(d=>d.date===todayISO());const nowM=Math.ceil((new Date().getHours()*60+new Date().getMinutes())/5)*5;
+  const st=toMin(e.start),en=toMin(e.end);const dur=st!=null&&en!=null&&en>st?en-st:null;
+  const defDay=today?today.id:(t.days.some(d=>d.id===e.dayId)?e.dayId:t.days[0].id);const defStart=today?hhmm(nowM):(e.start||"");
+  const orig=t.days.find(d=>d.id===e.dayId);const oi=t.days.indexOf(orig);
+  const m=modal(`<form class="card"><h3>📅 언제 갈까요?</h3><p class="hint">${esc(e.title)}</p>
+    ${today?`<button type="button" class="btn" data-q="now">지금 바로 (오늘 ${hhmm(nowM)})</button>`:""}
+    ${orig&&e.start?`<button type="button" class="btn" data-q="orig">원래 자리 (Day ${oi+1} ${esc(e.start)})</button>`:""}
+    <div class="grid2"><div class="field"><label for="u-day">날짜</label><select class="inp" id="u-day">${t.days.map((d,i)=>`<option value="${d.id}" ${d.id===defDay?"selected":""}>Day ${i+1} · ${fmtDate(d.date)}${d.date===todayISO()?" (오늘)":""}</option>`).join("")}</select></div>
+    <div class="field"><label for="u-start">시작 시간</label><input class="inp mono" id="u-start" type="time" value="${esc(defStart)}"></div></div>
+    ${dur?`<p class="hint">끝나는 시간은 원래 길이(${dur}분)에 맞춰 정해져요.</p>`:""}
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">일정에 넣기</button></div></form>`);
+  const put=(dayId,start)=>{const s2=toMin(start);const end=s2!=null&&dur?hhmm(s2+dur):(s2!=null?"":e.end||"");
+    const o={status:"todo",dayId,start:start||"",end};Object.assign(e,o);patchEv(e.id,o);flushPatches();closeModalEl(m);
+    if(openEv===e.id)closeDrawer();curDay=dayId;render();const i=t.days.findIndex(d=>d.id===dayId);toast(`Day ${i+1}${start?" "+start:""}에 넣었어요`)};
+  m.querySelectorAll("[data-q]").forEach(b=>b.onclick=()=>b.dataset.q==="now"?put(today.id,hhmm(nowM)):put(e.dayId,e.start));
+  m.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();put(m.querySelector("#u-day").value,m.querySelector("#u-start").value)});
+}
 function planHTML(t){
   const holdEvs=t.events.filter(e=>e.status==="hold"&&inEv(e,pf));
   if(pf&&!t.people.some(p=>p.id===pf))pf="";
@@ -314,7 +344,7 @@ function planHTML(t){
   let body;
   if(curDay==="hold"){
     body=`<div class="dayhead"><div><span class="eyebrow">보류함</span><h2>보류한 일정</h2></div></div>
-    <p class="hint">보류한 일정은 여기 모입니다. 열어서 다른 날로 옮기거나 다시 예정으로 돌릴 수 있어요.</p>
+    <p class="hint">보류한 일정은 날짜별 일정에서 빠져 여기 모여요. 시간이 남으면 골라서 <b>📅 일정에 넣기</b>를 누르세요. 원하는 날, 원하는 시간으로 다시 들어가요.</p>
     <div class="timeline">${holdEvs.length?holdEvs.map(e=>evHTML(e,true)).join(""):`<div class="empty"><p>보류한 일정이 없어요.</p></div>`}</div>`;
   }else{
     const d=t.days.find(x=>x.id===curDay);const idx=t.days.indexOf(d);const ev=evsVis(t,d.id);
@@ -346,9 +376,10 @@ function evHTML(e,showDay){
       <div class="ev-top"><button class="ev-title" data-act="open" data-id="${e.id}">${esc(e.title||"제목 없음")}</button><span class="chip ${e.status}">${ST[e.status]}</span></div>
       ${e.place?`<div class="ev-place">${esc(e.place)}</div>`:""}
       <div class="ev-tags"><span class="cchip cat-${e.cat}">${CATS[e.cat]}</span>${e.with&&t.people.length&&e.with.length<t.people.length?`<span class="who">👤 ${esc(e.with.map(id=>pName(t,id)).filter(Boolean).join(", ")||"정하지 않음")}</span>`:""}${tags.map(x=>`<span>${esc(x)}</span>`).join("")}</div>
-      <div class="ev-actions">
+      <div class="ev-actions">${e.status==="hold"?`
+        <button class="st-btn primary" data-act="unhold" data-id="${e.id}">📅 일정에 넣기</button>`:`
         <button class="st-btn done" aria-pressed="${e.status==="done"}" data-act="status" data-s="done" data-id="${e.id}">✓ 완료</button>
-        <button class="st-btn hold" aria-pressed="${e.status==="hold"}" data-act="status" data-s="hold" data-id="${e.id}">보류</button>
+        <button class="st-btn hold" aria-pressed="false" data-act="status" data-s="hold" data-id="${e.id}">보류</button>`}
         <button class="st-btn" data-act="open" data-id="${e.id}">상세 · 기록</button>
         ${routeOf(e).dest&&e.status!=="done"?`<a class="st-btn go" href="${navURL(prefs.nav||"google",routeOf(e))}" target="_blank" rel="noopener">🚗 가기</a>`:""}
       </div>
@@ -446,9 +477,119 @@ function journalHTML(t){
       <div class="row"><button class="btn sm ghost" data-act="editJournal" data-id="${d.id}">${myNote("day-"+d.id).diary?"내 하루 글 고치기":"내 하루 글 쓰기"}</button></div>
     </section>`}).join("");
   return `<div class="journal-list">${cover}
-    <div class="card"><h3>여행기 완성하기</h3><p class="hint">1) 여행이 끝나면 각자 ⋯ → '내 사진 보내기'로 파일을 만들어 한 사람에게 보내요. 2) 받은 사람은 '사진 합치기'로 모아요. 3) '여행기용 내보내기' 파일을 Claude 채팅에 올리고 "여행기 만들어줘"라고 하면 됩니다.</p><button class="btn sm" data-act="settings" style="align-self:flex-start">사진 모으기 · 내보내기</button></div>
+    <div class="card"><h3>여행기 완성하기</h3><p class="hint">1) 여행이 끝나면 각자 ⋯ → '내 사진 보내기'로 파일을 만들어 한 사람에게 보내요. 2) 받은 사람은 '사진 합치기'로 모아요. 3) '여행기용 내보내기' 파일을 Claude 채팅에 올리고 "여행기 만들어줘"라고 하면 됩니다.</p><div class="row"><button class="btn sm primary" data-act="photobook">📖 사진첩 만들기</button><button class="btn sm" data-act="settings">사진 모으기 · 내보내기</button></div></div>
     ${days||`<div class="empty"><span class="eyebrow">여행기</span><h2>완료한 일정이 여기 쌓여요</h2><p>일정을 완료로 넘기고 상세 화면에서 기록과 사진을 남기면, 날짜별 여행기로 정리됩니다. '함께 보기'로 남긴 기록은 다른 사람 여행기에도 보여요.</p></div>`}</div>`;
 }
+
+/* ================= photobook (사진첩 PDF · 페이지 사진) ================= */
+const PB_FONT='system-ui,-apple-system,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
+async function pbImage(id,useOrig){let r=null;if(useOrig)r=await dbGet("orig",id).catch(()=>null);if(!r)r=await dbGet("photos",id).catch(()=>null);if(!r||!r.blob)return null;
+  try{return await createImageBitmap(r.blob,{imageOrientation:"from-image"})}catch(e){try{return await imgFromBlob(r.blob)}catch(e2){return null}}}
+function pbFill(ctx,img,x,y,w,h){const iw=img.width,ih=img.height;const s=Math.max(w/iw,h/ih);const sw=w/s,sh=h/s;ctx.drawImage(img,(iw-sw)/2,(ih-sh)/2,sw,sh,x,y,w,h)}
+function pbLines(ctx,text,maxW,maxLines){const out=[];
+  for(const para of String(text||"").split("\n")){let line="";
+    for(const tok of para.split(/(\s+)/)){if(!tok)continue;
+      if(ctx.measureText(line+tok).width<=maxW){line+=tok;continue}
+      if(line.trim()){out.push(line.trimEnd());line=""}
+      if(ctx.measureText(tok).width<=maxW){line=tok.trimStart();continue}
+      for(const ch of tok){if(ctx.measureText(line+ch).width>maxW&&line){out.push(line);line=ch}else line+=ch}}
+    out.push(line.trimEnd());if(out.length>maxLines)break}
+  while(out.length&&!out[out.length-1])out.pop();
+  if(out.length>maxLines){out.length=maxLines;let l=out[maxLines-1];while(l&&ctx.measureText(l+"…").width>maxW)l=l.slice(0,-1);out[maxLines-1]=l+"…"}
+  return out}
+function pbText(ctx,lines,x,y,lh){lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lh));return y+lines.length*lh}
+function pbPlan(t,o){const pages=[{type:"cover"}];let nPh=0;
+  const notesOf=key=>allNotes(key).filter(n=>o.priv||!n.mine||n.shared);
+  t.days.forEach((d,i)=>{const evs=evsOf(t,d.id).filter(e=>e.status==="done");const dn=notesOf("day-"+d.id);
+    const withPh=evs.filter(e=>photosOf(e.id).length),noPh=evs.filter(e=>!photosOf(e.id).length);
+    if(!evs.length&&!dn.length)return;
+    pages.push({type:"day",d,i,notes:dn,list:noPh.filter(e=>e.cat!=="move"||notesOf("ev-"+e.id).length).map(e=>({e,n:notesOf("ev-"+e.id)[0]}))});
+    withPh.forEach(e=>{const ph=photosOf(e.id).map(p=>p.id);nPh+=ph.length;const ns=notesOf("ev-"+e.id);
+      const per=Math.ceil(ph.length/Math.ceil(ph.length/4));for(let k=0;k<ph.length;k+=per)pages.push({type:"photos",d,i,e,ph:ph.slice(k,k+per),notes:k?[]:ns,cont:k>0})})});
+  pages.push({type:"end",nPh});return pages}
+async function pbDraw(t,pg,S,o,cover){
+  const c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
+  const th=(THEMES[t.theme]||THEMES.teal).l,acc=th[0],soft=th[1],ink="#17232B",mut="#5E6B73";const m=Math.round(S*.07),u=S/100;
+  const F=(sz,w)=>x.font=`${w||400} ${Math.round(sz*u)}px ${PB_FONT}`;x.textBaseline="top";
+  x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);
+  if(pg.type==="cover"){
+    if(cover){pbFill(x,cover,0,0,S,S);const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
+    else{x.fillStyle=acc;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
+    let y=S*.66;F(3.2,600);x.globalAlpha=.85;x.fillText(pbLines(x,(t.destination||"").toUpperCase(),S-2*m,1)[0]||"",m,y);x.globalAlpha=1;y+=5*u;
+    F(8.5,800);y=pbText(x,pbLines(x,t.name,S-2*m,2),m,y,10*u)+1.5*u;
+    F(3.4,500);x.fillText(`${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`,m,y);y+=5.2*u;
+    if(t.people.length){F(3.4,400);x.fillText(t.people.map(p=>p.name).join(" · "),m,y)}
+  }else if(pg.type==="day"){
+    x.fillStyle=soft;x.fillRect(0,0,S,S);x.fillStyle=acc;x.fillRect(0,0,S,S*.012);
+    let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText(`DAY ${pg.i+1}  ·  ${fmtDate(pg.d.date,true)}`,m,y);y+=7*u;
+    x.fillStyle=ink;F(7.2,800);y=pbText(x,pbLines(x,(pg.d.emoji?pg.d.emoji+" ":"")+(pg.d.title||`Day ${pg.i+1}`),S-2*m,2),m,y,8.6*u)+3*u;
+    if(o.text){
+      for(const n of pg.notes){const who=n.mine?pName(t,L.me):pName(t,n.by);F(3,600);x.fillStyle=acc;x.fillText(who||"",m,y);y+=4.4*u;
+        x.fillStyle=ink;F(3.4,400);y=pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join("\n"),S-2*m,7),m,y,5*u)+3*u;if(y>S*.7)break}
+      if(pg.list.length&&y<S*.86){x.fillStyle=mut;F(2.8,700);x.fillText("이날 다닌 곳",m,y);y+=4.6*u;
+        for(const {e,n} of pg.list){if(y>S-m-4*u)break;x.fillStyle=mut;F(2.9,500);x.fillText(e.start||"",m,y);x.fillStyle=ink;F(3.2,600);
+          const line=e.title+(n&&n.mood?`  — ${n.mood}`:"");x.fillText(pbLines(x,line,S-2*m-12*u,1)[0]||"",m+12*u,y);y+=5*u}}
+    }
+  }else if(pg.type==="photos"){
+    const capH=o.text&&!pg.cont?S*.2:S*.13;const W=S-2*m,H=S-m-capH-m*.4;const gap=Math.round(1.2*u);
+    const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
+    const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh);else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}};
+    const n=imgs.length,X=m,Y=m;
+    if(n===1)box(0,X,Y,W,H);
+    else if(n===2){const w=(W-gap)/2;box(0,X,Y,w,H);box(1,X+w+gap,Y,w,H)}
+    else if(n===3){const w=(W-gap)*.6;box(0,X,Y,w,H);const h=(H-gap)/2;box(1,X+w+gap,Y,W-w-gap,h);box(2,X+w+gap,Y+h+gap,W-w-gap,h)}
+    else{const w=(W-gap)/2,h=(H-gap)/2;box(0,X,Y,w,h);box(1,X+w+gap,Y,w,h);box(2,X,Y+h+gap,w,h);box(3,X+w+gap,Y+h+gap,w,h)}
+    imgs.forEach(im=>im&&im.close&&im.close());
+    let y=Y+H+m*.45;const e=pg.e;
+    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}${e.start?"  ·  "+e.start:""}`,m,y);y+=4.2*u;
+    x.fillStyle=ink;F(4,800);x.fillText(pbLines(x,e.title+(pg.cont?" (계속)":""),W,1)[0],m,y);y+=5.6*u;
+    if(o.text&&!pg.cont){const w=withNames(t,e);const sub=[e.place,w&&w!=="모두"?"함께: "+w:""].filter(Boolean).join("  ·  ");
+      if(sub){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,sub,W,1)[0],m,y);y+=4.4*u}
+      const n=pg.notes[0];if(n){x.fillStyle=ink;F(3,400);pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join(" — "),W,Math.max(1,Math.floor((S-m*.6-y)/(4.4*u)))),m,y,4.4*u)}}
+  }else{
+    x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText("함께한 시간",m,y);y+=8*u;
+    const done=t.events.filter(e=>e.status==="done"&&e.cat!=="move").length;const stats=[[`${t.days.length}일`,"여행"],[`${done}곳`,"다닌 곳"],[`${pg.nPh}장`,"사진"]];
+    if(sum(t.expenses))stats.push([money(sum(t.expenses),t),"쓴 돈"]);
+    const cw=(S-2*m)/stats.length;stats.forEach(([a,b],k)=>{x.fillStyle=ink;F(6,800);x.fillText(a,m+k*cw,y);x.fillStyle=mut;F(2.8,500);x.fillText(b,m+k*cw,y+8*u)});y+=17*u;
+    if(t.people.length){x.fillStyle=mut;F(2.8,700);x.fillText("함께한 사람",m,y);y+=4.6*u;x.fillStyle=ink;F(3.8,600);y=pbText(x,pbLines(x,t.people.map(p=>p.name).join(" · "),S-2*m,2),m,y,5.4*u)+4*u}
+    const held=t.events.filter(e=>e.status==="hold");
+    if(held.length){x.fillStyle=mut;F(2.8,700);x.fillText("다음에 꼭 갈 곳",m,y);y+=4.6*u;x.fillStyle=ink;F(3.2,500);
+      for(const e of held.slice(0,8)){x.fillText("· "+pbLines(x,e.title,S-2*m-4*u,1)[0],m,y);y+=4.8*u}}
+    x.fillStyle=mut;F(2.4,500);x.fillText("여행 일정 노트로 만든 사진첩",m,S-m)}
+  return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.9))}
+async function pdfFromJpegs(list,pt){const parts=[],offs=[];let off=0;
+  const push=b=>{if(typeof b==="string")b=enc.encode(b);parts.push(b);off+=b instanceof Blob?b.size:b.byteLength};
+  push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");const N=2+list.length*3;
+  offs[1]=off;push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+  offs[2]=off;push(`2 0 obj\n<< /Type /Pages /Count ${list.length} /Kids [${list.map((_,i)=>`${3+i*3} 0 R`).join(" ")}] >>\nendobj\n`);
+  list.forEach((p,i)=>{const a=3+i*3,cs=`q ${pt} 0 0 ${pt} 0 0 cm /Im0 Do Q`;
+    offs[a]=off;push(`${a} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt} ${pt}] /Resources << /XObject << /Im0 ${a+2} 0 R >> >> /Contents ${a+1} 0 R >>\nendobj\n`);
+    offs[a+1]=off;push(`${a+1} 0 obj\n<< /Length ${cs.length} >>\nstream\n${cs}\nendstream\nendobj\n`);
+    offs[a+2]=off;push(`${a+2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.blob.size} >>\nstream\n`);push(p.blob);push("\nendstream\nendobj\n")});
+  const x0=off;push(`xref\n0 ${N+1}\n0000000000 65535 f \n`+Array.from({length:N},(_,k)=>String(offs[k+1]).padStart(10,"0")+" 00000 n \n").join(""));
+  push(`trailer\n<< /Size ${N+1} /Root 1 0 R >>\nstartxref\n${x0}\n%%EOF\n`);
+  return new Blob(parts,{type:"application/pdf"})}
+function photobookModal(){const t=T;if(!t)return;
+  const pages=pbPlan(t,{priv:true,text:true});const nPh=pages[pages.length-1].nPh;
+  const m=modal(`<div class="card" style="max-height:92vh;overflow-y:auto"><h3>📖 사진첩 만들기</h3>
+    <p class="hint">완료한 일정의 사진과 기록으로 8×8 인치 정사각 사진첩을 만들어요. 표지 → 날짜별 첫 장 → 사진 페이지 → 마무리 순서예요. 지금 기준 <b>${pages.length}쪽 · 사진 ${nPh}장</b>.${nPh?"":" 아직 사진이 없어요. 일정 상세에서 사진을 넣어 주세요."}</p>
+    <p class="hint">이 폰에 있는 사진만 들어가요. 다른 사람 사진까지 넣으려면 먼저 ⋯ → '사진 모으기'로 합쳐 주세요.</p>
+    <div class="field"><label for="pb-q">화질</label><select class="inp" id="pb-q"><option value="1600">보기·공유용 (가벼움)</option><option value="2400">인쇄용 (고화질, 원본 사진 사용)</option></select></div>
+    <div class="field"><label for="pb-f">파일 형태</label><select class="inp" id="pb-f"><option value="pdf">PDF 한 파일 (보기, 인쇄소 맡기기)</option><option value="jpg">페이지별 사진 묶음 (Mixbook·Shutterfly에 한 장씩 꽉 차게 올리기)</option></select></div>
+    <label class="row" style="gap:8px"><input type="checkbox" id="pb-t" checked> 기록(한 줄 감정 · 일기) 넣기</label>
+    <label class="row" style="gap:8px"><input type="checkbox" id="pb-p" checked> 나만 보기 기록도 넣기 <span class="hint">(남에게 줄 사진첩이면 끄세요)</span></label>
+    <div id="pbOut" class="hint"></div><div id="pbPrev" class="pbprev"></div>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">닫기</button><button type="button" class="btn primary" id="pbGo"${pages.length<3?" disabled":""}>만들기</button></div></div>`);
+  m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");prev.innerHTML="";
+    const S=+m.querySelector("#pb-q").value,fmt=m.querySelector("#pb-f").value;const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,orig:S>2000};
+    try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
+      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S});
+        if(k<4){const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽 미리보기`;prev.appendChild(im)}}
+      cover&&cover.close&&cover.close();const day=t.start||todayISO();
+      if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`tripnote-photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`)}
+      else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`tripnote-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`)}
+    }catch(e){console.error(e);out.textContent="사진첩을 만들지 못했어요. 화질을 '보기·공유용'으로 바꿔 다시 해 보세요."}
+    b.disabled=false}}
 
 /* ================= detail drawer ================= */
 function openDrawer(id){
@@ -460,7 +601,7 @@ function openDrawer(id){
   <aside class="drawer" role="dialog" aria-label="일정 상세">
     <div class="drawer-head"><div class="row"><span class="chip ${e.status}" id="dChip">${ST[e.status]}</span>
       <button class="st-btn done" aria-pressed="${e.status==="done"}" data-act="dstatus" data-s="done">✓ 완료</button>
-      <button class="st-btn hold" aria-pressed="${e.status==="hold"}" data-act="dstatus" data-s="hold">보류</button></div>
+      <button class="st-btn hold" aria-pressed="${e.status==="hold"}" data-act="dstatus" data-s="hold">보류</button>${e.status==="hold"?`<button class="st-btn primary" data-act="unhold" data-id="${e.id}">📅 일정에 넣기</button>`:""}</div>
       <button class="btn sm" data-act="close">닫기</button></div>
     <div class="drawer-body">
       <div class="card">
@@ -601,7 +742,7 @@ function tripModal(edit){
       <div class="field"><label for="t-people">함께 가는 사람 (쉼표로 구분, 각자 참여할 때 넣어도 돼요)</label><input class="inp" id="t-people" placeholder="엄마, 아빠"></div>`}
     <p class="hint">${edit?"기간을 줄이면 빠지는 날짜의 일정은 보류함으로 옮겨져요. 바꾼 내용은 모두에게 보여요.":"기간에 맞춰 날짜별 탭과 기본 준비 체크리스트가 만들어지고, 초대 코드가 생겨요 (최대 60일)."}</p>
     <p class="hint" id="t-err" style="color:var(--danger)" hidden></p>
-    <div class="row" style="justify-content:space-between">${edit?(isOwner()?`<button type="button" class="btn sm danger" data-act="delTrip">여행 삭제 (모두에게서)</button>`:`<button type="button" class="btn sm danger" data-act="leave">이 폰에서 나가기</button>`):"<span></span>"}
+    <div class="row" style="justify-content:space-between">${edit?`<div class="row"><button type="button" class="btn sm" data-act="leave">이 폰에서만 빼기</button>${isOwner()?`<button type="button" class="btn sm danger" data-act="delTrip">모두에게서 삭제</button>`:""}</div>`:"<span></span>"}
     <div class="row"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">${edit?"저장":"만들기"}</button></div></div></form>`);
   m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
     const name=m.querySelector("#t-name").value.trim(),dest=m.querySelector("#t-dest").value.trim(),s=m.querySelector("#t-start").value,e=m.querySelector("#t-end").value;
@@ -891,7 +1032,7 @@ async function exportJournal(out,max){
   t.days.forEach((d,i)=>{
     L2.push(`## ${d.emoji?d.emoji+" ":""}Day ${i+1} · ${fmtDate(d.date,true)}${d.title?" · "+d.title:""}`,"");
     const dn=allNotes("day-"+d.id);if(dn.length)L2.push(...noteLines(dn),"");
-    const evs=evsOf(t,d.id);if(!evs.length)L2.push("(일정 없음)","");
+    const evs=evsOf(t,d.id).filter(e=>e.status!=="hold");if(!evs.length)L2.push("(일정 없음)","");
     evs.forEach(e=>{
       const names=photosOf(e.id).map((p,j)=>{const n=`사진/D${String(i+1).padStart(2,"0")}_${(e.start||"0000").replace(":","")}_${slug(e.title)}_${j+1}.jpg`;jobs.push({name:n,id:p.id});return `${n} (${nm(p.by||L.me)})`});
       const w=withNames(t,e);const exs=t.expenses.filter(x=>x.evId===e.id);const ns=allNotes("ev-"+e.id);
@@ -907,6 +1048,8 @@ async function exportJournal(out,max){
       evJson.push({day:i+1,date:d.date,start:e.start,end:e.end,title:e.title,category:CATS[e.cat],status:ST[e.status],place:e.place,address:e.address,with:w,memo:e.memo,notes:ns.map(n=>({author:n.mine?nm(L.me):nm(n.by),mood:n.mood,diary:n.diary})),photos:names,restaurants:(e.restaurants||[]).map(({id,...r})=>r)});
     });
   });
+  const held=t.events.filter(e=>e.status==="hold");
+  if(held.length){L2.push("## 보류한 곳 (이번엔 못 감)","");held.forEach(e=>L2.push(`- ${e.title}${e.place?` · ${e.place}`:""}${e.memo?` (${e.memo.replace(/\n/g," / ")})`:""}`));L2.push("")}
   L2.push("## 지출 요약","",`- 총 지출: ${money(sum(t.expenses),t)}${t.budget?` / 예산 ${money(t.budget,t)}`:""}`);
   Object.keys(CATS).forEach(k=>{const v=sum(t.expenses.filter(x=>x.cat===k));if(v)L2.push(`- ${CATS[k]}: ${money(v,t)}`)});
   t.people.forEach(p=>{const v=sum(t.expenses.filter(x=>x.paidBy===p.id));if(v)L2.push(`- ${p.name} 결제: ${money(v,t)}`)});L2.push("");
@@ -919,6 +1062,14 @@ async function exportJournal(out,max){
   offerFile(out,blob,`tripnote-journal-${t.start||todayISO()}.zip`,blob.size>25*1048576?"파일이 커요. 올리기 어려우면 사진 크기를 '작게'로 바꿔 다시 만들어 보세요.":"Claude 채팅에 이 파일을 올리고 \"여행기 만들어줘\"라고 하세요.");
 }
 async function leaveTrip(){const tid=curId;delete locals[tid];await dbDel("local",tid).catch(()=>{});gc();const next=Object.keys(locals)[0]||null;selectTrip(next);toast("이 폰에서 여행을 지웠어요")}
+function delTripModal(){const t=T;if(!t)return;
+  const m=modal(`<form class="card"><h3 style="color:var(--danger)">여행을 모두에게서 삭제할까요?</h3>
+    <p>지우면 <b>함께하는 모든 사람의 폰에서</b> 일정, 예산, 체크리스트, 함께 보기 기록이 사라지고 <b>되돌릴 수 없어요.</b></p>
+    <p class="hint">이 폰에서만 안 보이게 하려면 취소하고 '이 폰에서만 빼기'를 누르세요. 초대 코드로 언제든 다시 들어올 수 있어요. 지우기 전에 ⋯ 메뉴에서 백업을 받아 두면 되살릴 수 있어요.</p>
+    <div class="field"><label for="dt-name">확인을 위해 여행 이름 <b>${esc(t.name)}</b>을 그대로 입력하세요</label><input class="inp" id="dt-name" autocomplete="off"></div>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn danger" id="dt-go" disabled>모두에게서 삭제</button></div></form>`);
+  const inp=m.querySelector("#dt-name"),go=m.querySelector("#dt-go");inp.oninput=()=>go.disabled=inp.value.trim()!==String(t.name).trim();
+  m.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();if(go.disabled)return;closeModalEl(m);deleteTrip()});setTimeout(()=>inp.focus(),50)}
 async function deleteTrip(){const tid=curId;toast("삭제하는 중…");
   try{for(const c of ["events","expenses","checklist","notes"]){const s=await FB.getDocs(ref.col(c,tid));const b=chunkedBatch();s.docs.forEach(d=>b.delete(d.ref));await b.commit()}
     await FB.deleteDoc(ref.trip(tid));await leaveTrip();toast("여행을 삭제했어요")}catch(e){toast(errMsg(e))}}
@@ -951,7 +1102,10 @@ document.addEventListener("click",async ev=>{
       setTimeout(()=>{openDrawer(id);const i=$("#f-title");i&&(i.focus(),i.select())},150);break}
     case "open":openDrawer(b.dataset.id);break;
     case "close":closeDrawer();break;
-    case "status":{const e=t.events.find(x=>x.id===b.dataset.id);const s=e.status===b.dataset.s?"todo":b.dataset.s;e.status=s;patchEv(e.id,{status:s});flushPatches();render();if(s==="done"){const n=nextEvent(e);if(n){const r=routeOf(n);r.origin="";toastAction(`완료! 다음: ${n.title}`,"🚗 출발",navURL(prefs.nav||"google",r))}else toast("완료! 상세에서 기록과 사진을 남겨보세요")}break}
+    case "status":{const e=t.events.find(x=>x.id===b.dataset.id);const s=e.status===b.dataset.s?"todo":b.dataset.s;e.status=s;patchEv(e.id,{status:s});flushPatches();render();if(s==="done"){const n=nextEvent(e);if(n){const r=routeOf(n);r.origin="";toastAction(`완료! 다음: ${n.title}`,"🚗 출발",navURL(prefs.nav||"google",r))}else toast("완료! 상세에서 기록과 사진을 남겨보세요")}if(s==="hold")toast("보류함으로 옮겼어요. 모아보기에서 언제든 다시 넣을 수 있어요");break}
+    case "unhold":unholdModal(b.dataset.id);break;
+    case "photobook":photobookModal();break;
+    case "clearSyncErr":syncErr=null;updStatus();break;
     case "dstatus":{const e=curEv();e.status=e.status===b.dataset.s?"todo":b.dataset.s;patchEv(e.id,{status:e.status});flushPatches();
       document.querySelectorAll('.drawer [data-act="dstatus"]').forEach(x=>x.setAttribute("aria-pressed",x.dataset.s===e.status));
       const c=$("#dChip");c.className="chip "+e.status;c.textContent=ST[e.status];break}
@@ -1013,8 +1167,8 @@ document.addEventListener("click",async ev=>{
     case "impBackup":importBackup(b.closest(".modal").querySelector("#bkOut"));break;
     case "expJournal":{const m=b.closest(".modal");b.disabled=true;await exportJournal(m.querySelector("#jOut"),+m.querySelector("#jSize").value).catch(e=>{console.error(e);toast("파일을 만들지 못했어요")});b.disabled=false;break}
     case "install":if(installEvt){installEvt.prompt();installEvt=null;b.remove()}break;
-    case "leave":{if(!confirmTap(b,"한 번 더 누르면 이 폰에서 지워요 (사진 포함)"))break;closeModalEl(b.closest(".modal"));leaveTrip();break}
-    case "delTrip":{if(!confirmTap(b,"한 번 더 누르면 모두에게서 삭제"))break;closeModalEl(b.closest(".modal"));deleteTrip();break}
+    case "leave":{if(!confirmTap(b,"한 번 더: 이 폰에서만 빼요"))break;closeModalEl(b.closest(".modal"));leaveTrip();break}
+    case "delTrip":closeModalEl(b.closest(".modal"));delTripModal();break;
   }
 });
 document.addEventListener("input",ev=>{

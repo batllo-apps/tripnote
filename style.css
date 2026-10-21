@@ -331,3 +331,13 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 /* parallel events */
 .par{display:flex;flex-direction:column;gap:8px;border:1.5px dashed color-mix(in srgb,var(--accent) 45%,transparent);border-radius:16px;padding:8px;background:color-mix(in srgb,var(--accent-soft) 45%,transparent)}
 .par-head{font-size:12px;font-weight:600;color:var(--accent);padding:0 4px}
+/* 동기화 경고 */
+.syncwarn{margin-top:8px;display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:12px;background:color-mix(in srgb,var(--danger) 10%,var(--card));color:var(--danger);font-size:.9rem;line-height:1.4;border:1px solid color-mix(in srgb,var(--danger) 35%,transparent)}
+.syncwarn .btn{flex:none}
+#syncDot[data-s="err"]{background:var(--danger)}
+.st-btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.danger:disabled{opacity:.45}
+/* 아주 좁은 화면 (아이폰 SE 등) */
+@media (max-width:360px){.drawer .grid2{grid-template-columns:1fr}}
+.pbprev{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pbprev img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.18)}
