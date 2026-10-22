@@ -5,6 +5,7 @@ const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
 const enc=new TextEncoder(), dec=new TextDecoder();
 const WD=["일","월","화","수","목","금","토"];
+const APP={ko:"같이가J",en:"GoTripJ",tag:"함께 짜고, 함께 기록하는 여행"};
 const ST={todo:"예정",done:"완료",hold:"보류"};
 const CATS={stay:"숙소",sight:"관광",food:"식사",move:"이동",shop:"쇼핑",etc:"기타"};
 const PREP={doc:"서류",book:"예약",pack:"짐",etc:"기타"};
@@ -22,6 +23,28 @@ const NAVN={google:"Google 지도",waze:"Waze",apple:"Apple 지도"};
 const FONTS={normal:1,large:1.12,xl:1.25};
 let prefs={appearance:"auto",font:"normal",cats:{},nav:"google"};
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem("tripnote:prefs")||"{}"))}catch(e){}
+/* ---------- 언어 (한국어 / English) ---------- */
+const LANG=(()=>{const p=prefs.lang||"auto";if(p==="ko"||p==="en")return p;return /^ko/i.test(navigator.language||"")?"ko":"en"})();
+const HANGUL=/[가-힣]/;let TPATS=null;
+function trCore(c){const I=window.I18N;if(!I)return null;if(I.exact[c]!=null)return I.exact[c];
+  if(!TPATS)TPATS=I.pats.map(([r,v])=>[new RegExp(r,"s"),v]);
+  for(const [rx,v] of TPATS){const mm=rx.exec(c);if(mm)return v.replace(/\{(\d+)\}/g,(_,k)=>{const g=mm[+k+1]||"";return HANGUL.test(g)?tt(g):g})}
+  const lp=/^([.,·:]\s*)([\s\S]+)$/.exec(c);if(lp){const r=trCore(lp[2]);if(r!=null)return lp[1]+r}
+  const tp=/^([\s\S]+?)(\s*[·:,]\s*)$/.exec(c);if(tp){const r=trCore(tp[1]);if(r!=null)return r+tp[2]}
+  if(c.includes(" · ")){const ps=c.split(" · ");let ch=false;const o=ps.map(x=>{if(!HANGUL.test(x))return x;const r=trCore(x.trim());if(r!=null){ch=true;return r}return x});if(ch)return o.filter((x,i)=>x!==""||i<o.length-1).join(" · ")}
+  let out=c,ch=false;for(const f of I.frag){if(out.includes(f)){out=out.split(f).join(I.exact[f]);ch=true}}return ch?out:null}
+function tt(s){if(LANG!=="en"||!s||!HANGUL.test(s))return s;const m=/^(\s*)([\s\S]*?)(\s*)$/.exec(s);const r=trCore(m[2]);if(r==null)return s;
+  return (/^[,.;:!?)]/.test(r)?"":m[1])+r+m[3]}
+const NOTR=new Set(["SCRIPT","STYLE","TEXTAREA"]);
+function trNode(n){if(n.nodeType===3){const p=n.parentNode;if(!p||NOTR.has(p.nodeName))return;const v=n.nodeValue;if(HANGUL.test(v)){const t=tt(v);if(t!==v)n.nodeValue=t}return}
+  if(n.nodeType!==1||n.hasAttribute("data-nt"))return;
+  for(const a of ["placeholder","aria-label","title","alt"]){const v=n.getAttribute(a);if(v&&HANGUL.test(v)){const t=tt(v);if(t!==v)n.setAttribute(a,t)}}
+  if(NOTR.has(n.nodeName))return;
+  for(const c of [...n.childNodes])trNode(c)}
+if(LANG==="en"){document.documentElement.lang="en";
+  new MutationObserver(ms=>{for(const m of ms){if(m.type==="characterData")trNode(m.target);else m.addedNodes.forEach(trNode)}}).observe(document.documentElement,{subtree:true,childList:true,characterData:true});
+  if(document.body)trNode(document.body)}
+const deepTx=o=>LANG!=="en"?o:typeof o==="string"?tt(o):Array.isArray(o)?o.map(deepTx):o&&typeof o==="object"?Object.fromEntries(Object.entries(o).map(([k,v])=>[k,deepTx(v)])):o;
 function savePrefs(){try{localStorage.setItem("tripnote:prefs",JSON.stringify(prefs))}catch(e){}applyTheme()}
 const darkMQ=window.matchMedia?matchMedia("(prefers-color-scheme: dark)"):null;
 const isDark=()=>prefs.appearance==="dark"||(prefs.appearance!=="light"&&!!darkMQ&&darkMQ.matches);
@@ -222,7 +245,10 @@ const reactText=n=>{const l=Object.entries(n.reactions||{}).filter(([,e])=>e);re
 
 /* ================= helpers ================= */
 const todayISO=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`};
-function fmtDate(iso,long){if(!iso)return "";const d=new Date(iso+"T12:00:00");const m=d.getMonth()+1,dd=d.getDate();return long?`${d.getFullYear()}.${String(m).padStart(2,"0")}.${String(dd).padStart(2,"0")} (${WD[d.getDay()]})`:`${m}/${dd} ${WD[d.getDay()]}`}
+const WD_EN=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"],MO_EN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+function fmtDate(iso,long){if(!iso)return "";const d=new Date(iso+"T12:00:00");const m=d.getMonth()+1,dd=d.getDate();
+  if(LANG==="en")return long?`${WD_EN[d.getDay()]}, ${MO_EN[m-1]} ${dd}, ${d.getFullYear()}`:`${WD_EN[d.getDay()]} ${m}/${dd}`;
+  return long?`${d.getFullYear()}.${String(m).padStart(2,"0")}.${String(dd).padStart(2,"0")} (${WD[d.getDay()]})`:`${m}/${dd} ${WD[d.getDay()]}`}
 function daysBetween(a,b){const out=[];const d=new Date(a+"T12:00:00");const e=new Date(b+"T12:00:00");let g=0;while(d<=e&&g<60){out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`);d.setDate(d.getDate()+1);g++}return out}
 const evsOf=(t,dayId)=>t.events.filter(e=>e.dayId===dayId).sort((a,b)=>(a.start||"99").localeCompare(b.start||"99"));
 const inEv=(e,pid)=>!pid||!e.with||e.with.includes(pid);
@@ -269,13 +295,21 @@ function scheduleRender(){cancelAnimationFrame(rq);rq=requestAnimationFrame(()=>
   const busy=document.querySelector(".modal")||openEv||document.activeElement?.matches?.("#app input,#app textarea,#app select");
   if(busy){needsRender=true;renderTripSel();refreshDrawerOthers();return}needsRender=false;render()})}
 document.addEventListener("focusout",()=>{if(needsRender)setTimeout(()=>{if(!document.activeElement?.matches?.("input,textarea,select"))scheduleRender()},50)});
-function render(){
+function applyBrand(){const nm=LANG==="en"?APP.en:APP.ko;const b=document.querySelector(".brand");if(b&&!b.dataset.n){b.dataset.n=1;b.lastChild.textContent=nm}document.title=nm}
+function render(){applyBrand();
   renderTripSel();updStatus();applyTheme();document.body.classList.toggle("ro",isViewer());document.body.classList.toggle("owner",isOwner());
   const app=$("#app");
-  if(!curId){app.innerHTML=`<div class="empty"><span class="eyebrow">시작하기</span><h2>여행을 만들거나 참여하세요</h2>
-    <p>여행을 만들면 초대 코드가 생겨요. 같이 가는 사람이 코드로 참여하면 일정, 예산, 체크리스트를 함께 보고 고칠 수 있어요. 사진과 '나만 보기' 기록은 각자 폰에만 저장돼요.</p>
-    <div class="row"><button class="btn primary" data-act="newTrip">+ 새 여행 만들기</button><button class="btn" data-act="join">초대 코드로 참여</button></div>
-    <div class="row"><button class="btn ghost sm" data-act="loadExample">예시로 둘러보기</button><button class="btn ghost sm" data-act="settings">백업 불러오기</button></div></div>`;return}
+  if(!curId){app.innerHTML=`<section class="welcome">
+    <div class="w-hero"><img src="icons/icon-192.png" alt="" width="72" height="72"><div><h1>${LANG==="en"?APP.en:APP.ko}</h1><p>${APP.tag}</p></div></div>
+    <ol class="w-steps">
+      <li><span class="w-ico">🗓️</span><div><b>일정은 쉽게</b><p>날짜별로 직접 넣거나, Claude에게 짜 달라고 한 일정을 붙여넣으면 한 번에 들어가요. 못 간 곳은 보류함에 모아 뒀다가 시간 날 때 다시 넣어요.</p></div></li>
+      <li><span class="w-ico">👨‍👩‍👧</span><div><b>같이 쓰는 여행</b><p>초대 링크 하나로 가족, 친구가 들어와요. 일정, 예산, 체크리스트를 함께 고치고, 아이 일정처럼 사람마다 다른 일정도 따로 둘 수 있어요. 배 위처럼 인터넷이 없어도 돼요.</p></div></li>
+      <li><span class="w-ico">📖</span><div><b>추억은 사진첩으로</b><p>일정마다 사진과 한 줄을 남기면, 여행이 끝난 뒤 사진첩 PDF가 만들어져요. 커플 Her·His 사진첩과 롤링페이퍼도 있어요.</p></div></li>
+    </ol>
+    <div class="w-cta"><button class="btn primary" data-act="newTrip">+ 새 여행 만들기</button><button class="btn" data-act="join">초대 코드로 참여</button></div>
+    <div class="row" style="justify-content:center"><button class="btn ghost sm" data-act="loadExample">예시로 둘러보기</button><button class="btn ghost sm" data-act="settings">백업 불러오기</button></div>
+    <p class="w-foot">회원가입 없음 · 광고 없음 · 사진은 내 폰에만<br><a href="privacy.html">개인정보 처리방침</a> · <a href="terms.html">이용약관</a></p>
+  </section>`;return}
   if(!T){app.innerHTML=tripMissing?`<div class="empty"><h2>이 여행을 찾을 수 없어요</h2><p>여행을 만든 사람이 삭제했거나 코드가 바뀌었어요. 이 폰의 백업 파일이 있으면 다시 만들 수 있어요.</p><div class="row"><button class="btn" data-act="settings">백업에서 다시 만들기</button><button class="btn danger" data-act="leave">목록에서 지우기</button></div></div>`
     :`<div class="empty"><h2>불러오는 중…</h2><p>${navigator.onLine?"잠시만 기다려 주세요.":"오프라인이에요. 이 폰에서 한 번도 열지 않은 여행은 인터넷이 연결되어야 보여요."}</p></div>`;return}
   const t=T;
@@ -316,6 +350,15 @@ function renderTripSel(){
 }
 
 const hhmm=m=>{m=Math.max(0,Math.min(23*60+59,m));return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
+function renamePersonModal(id){const t=T;const p=t.people.find(x=>x.id===id);if(!p)return;
+  if(isViewer()&&id!==L.me){toast("보기 전용은 내 이름만 바꿀 수 있어요");return}
+  const m=modal(`<form class="card"><h3>이름 바꾸기</h3><div class="field"><label for="rn-in">이름</label><input class="inp" id="rn-in" value="${esc(p.name)}" maxlength="20" autocomplete="off"></div>
+    <p class="hint">바꾼 이름은 모두에게 보여요. 일정의 "누구 일정", 기록, 지출에 붙은 이름도 함께 바뀌어요.</p>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">저장</button></div></form>`);
+  const inp=m.querySelector("#rn-in");setTimeout(()=>{inp.focus();inp.select()},50);
+  m.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();const name=inp.value.trim();if(!name){inp.focus();return}
+    if(t.people.some(x=>x.id!==id&&x.name===name)){toast("같은 이름이 이미 있어요");return}
+    const people=t.people.map(x=>x.id===id?{...x,name}:x);t.people=people;w(FB.updateDoc(ref.trip(),{people,updatedAt:Date.now()}));closeModalEl(m);render();toast("이름을 바꿨어요")})}
 function unholdModal(id){const t=T;const e=t.events.find(x=>x.id===id);if(!e)return;
   const today=t.days.find(d=>d.date===todayISO());const nowM=Math.ceil((new Date().getHours()*60+new Date().getMinutes())/5)*5;
   const st=toMin(e.start),en=toMin(e.end);const dur=st!=null&&en!=null&&en>st?en-st:null;
@@ -400,8 +443,8 @@ function prepHTML(t){
     </div>
     <div class="card">
       <h3>함께하는 사람 <span class="hint">${t.people.length}명</span></h3>
-      <div class="people">${t.people.map(p=>`<span class="pchip ${p.id===L.me?"is-me":""}"><b>${initial(p.name)}</b>${esc(p.name)}${p.id===L.me?" (나)":""}${ROLE_BADGE[roleOf(p.id)]}<button data-act="rmPerson" data-id="${p.id}" aria-label="${esc(p.name)} 빼기">✕</button></span>`).join("")||`<span class="hint">아직 없어요.</span>`}</div>
-      <p class="hint">👑 주인 · 👀 보기 전용 · 표시 없음 = 참가자 (일정·예산을 함께 고칠 수 있어요)</p>
+      <div class="people">${t.people.map(p=>`<span class="pchip ${p.id===L.me?"is-me":""}"><button type="button" class="pname" data-act="renamePerson" data-id="${p.id}" aria-label="${esc(p.name)} 이름 바꾸기"><b>${initial(p.name)}</b>${esc(p.name)}${p.id===L.me?" (나)":""}</button>${ROLE_BADGE[roleOf(p.id)]}<button data-act="rmPerson" data-id="${p.id}" aria-label="${esc(p.name)} 빼기">✕</button></span>`).join("")||`<span class="hint">아직 없어요.</span>`}</div>
+      <p class="hint">👑 주인 · 👀 보기 전용 · 표시 없음 = 참가자 (일정·예산을 함께 고칠 수 있어요)<br>이름을 누르면 바꾸고, ✕를 두 번 누르면 빼요 (빼기는 주인만)</p>
       ${isOwner()?`<button class="btn sm" data-act="roles" style="align-self:flex-start">역할 관리 · 주인 넘기기</button>`:""}
       <form class="addline" id="personForm"><input class="inp" id="personIn" placeholder="이름 (예: 엄마, 지훈)" autocomplete="off"><button class="btn">추가</button></form>
       <div class="row"><span class="hint">이 폰 사용자: <b>${esc(pName(t,L.me)||"정하지 않음")}</b></span><button class="btn sm ghost" data-act="whoami">바꾸기</button></div>
@@ -477,6 +520,7 @@ function journalHTML(t){
       <div class="row"><button class="btn sm ghost" data-act="editJournal" data-id="${d.id}">${myNote("day-"+d.id).diary?"내 하루 글 고치기":"내 하루 글 쓰기"}</button></div>
     </section>`}).join("");
   return `<div class="journal-list">${cover}
+    ${t.people.length>=2?letterCard(t):""}
     <div class="card"><h3>여행기 완성하기</h3><p class="hint">1) 여행이 끝나면 각자 ⋯ → '내 사진 보내기'로 파일을 만들어 한 사람에게 보내요. 2) 받은 사람은 '사진 합치기'로 모아요. 3) '여행기용 내보내기' 파일을 Claude 채팅에 올리고 "여행기 만들어줘"라고 하면 됩니다.</p><div class="row"><button class="btn sm primary" data-act="photobook">📖 사진첩 만들기</button><button class="btn sm" data-act="settings">사진 모으기 · 내보내기</button></div></div>
     ${days||`<div class="empty"><span class="eyebrow">여행기</span><h2>완료한 일정이 여기 쌓여요</h2><p>일정을 완료로 넘기고 상세 화면에서 기록과 사진을 남기면, 날짜별 여행기로 정리됩니다. '함께 보기'로 남긴 기록은 다른 사람 여행기에도 보여요.</p></div>`}</div>`;
 }
@@ -498,24 +542,104 @@ function pbLines(ctx,text,maxW,maxLines){const out=[];
   if(out.length>maxLines){out.length=maxLines;let l=out[maxLines-1];while(l&&ctx.measureText(l+"…").width>maxW)l=l.slice(0,-1);out[maxLines-1]=l+"…"}
   return out}
 function pbText(ctx,lines,x,y,lh){lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lh));return y+lines.length*lh}
+const ROLL_COL=["#FFF3B0","#FDE2E4","#E2F0CB","#DCEBFA","#EADCF8","#FFE5CC"];
+function lettersTo(t,o){const who=n=>n.mine?L.me:n.by;const ok=n=>n.diary&&n.diary.trim();const out=[];
+  const msgs=key=>allNotes(key).filter(ok).map(n=>({from:who(n),text:n.diary.trim()}));
+  if(o.couple){const A=o.couple.a,B=o.couple.b;
+    for(const [to,fr] of [[B,A],[A,B]]){const ms=[...msgs("letter-"+to.id),...msgs("letter").filter(x=>x.from===fr.id)];
+      if(ms.length)out.push({to:to.label,list:ms.map(x=>({...x,fromL:x.from===fr.id?`${fr.label} · ${pName(t,fr.id)}`:pName(t,x.from)}))})}
+    return out}
+  t.people.forEach(p=>{const ms=msgs("letter-"+p.id);if(ms.length)out.push({to:p.name,list:ms.map(x=>({...x,fromL:pName(t,x.from)}))})});
+  const all=msgs("letter");if(all.length)out.push({to:tt("우리 모두"),list:all.map(x=>({...x,fromL:pName(t,x.from)}))});
+  return out}
+function rollLayout(x,S,list,sc){sc=sc||1;const u0=S/100,u=u0*sc,m=Math.round(S*.07),gap=2.4*u0,cw=list.length===1?S-2*m:(S-2*m-gap)/2,pad=2.6*u,top=m*1.3+15*u0,bottom=S-m;
+  const colY=[top,top];const placed=[];
+  for(let k=0;k<list.length;k++){const it=list[k];x.font=`400 ${Math.round(3.1*u)}px ${PB_FONT}`;const lines=pbLines(x,it.text,cw-2*pad,40);
+    const h=pad*2+lines.length*4.6*u+5*u;const c=colY[0]<=colY[1]?0:1;
+    if(colY[c]+h>bottom){if(!placed.length){placed.push({it,lines,x:m,y:top,w:S-2*m,h:Math.min(h,bottom-top),k});return {placed,next:k+1}}return {placed,next:k}}
+    placed.push({it,lines,x:m+c*(cw+gap),y:colY[c],w:cw,h,k});colY[c]+=h+gap}
+  return {placed,next:list.length}}
+const RING_INK=["#C2414F","#2E78A8","#3A8A57","#8A55B0","#D4711B","#B5527A"];
+function rrect(x,X,Y,W,H,r){x.beginPath();x.moveTo(X+r,Y);x.arcTo(X+W,Y,X+W,Y+H,r);x.arcTo(X+W,Y+H,X,Y+H,r);x.arcTo(X,Y+H,X,Y,r);x.arcTo(X,Y,X+W,Y,r);x.closePath()}
+function ringFits(x,list){const u=10;x.font=`400 ${Math.round(3*u)}px ${PB_FONT}`;return list.every(it=>pbLines(x,it.text,300,99).length<=7)}
+/* --- 스티커 · 말풍선 · 우표 (롤링페이퍼 꾸미기) --- */
+function prng(seed){let a=seed>>>0;return()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const hashStr=s=>{let h=2166136261;for(const c of String(s))h=Math.imul(h^c.charCodeAt(0),16777619);return h>>>0};
+const STK_CACHE=new Map();
+function stickerCanvas(ch,px){const k=ch+"|"+px;if(STK_CACHE.has(k))return STK_CACHE.get(k);
+  const b=Math.round(px*.12),W=px+b*4,c=document.createElement("canvas");c.width=c.height=W;const x=c.getContext("2d");
+  const g=document.createElement("canvas");g.width=g.height=W;const gx=g.getContext("2d");gx.textAlign="center";gx.textBaseline="middle";gx.font=`${px}px "Noto Color Emoji","Apple Color Emoji","Segoe UI Emoji",sans-serif`;gx.fillText(ch,W/2,W/2+px*.06);
+  const w=document.createElement("canvas");w.width=w.height=W;const wx=w.getContext("2d");wx.drawImage(g,0,0);wx.globalCompositeOperation="source-in";wx.fillStyle="#fff";wx.fillRect(0,0,W,W);
+  x.shadowColor="rgba(0,0,0,.22)";x.shadowBlur=b*1.2;x.shadowOffsetY=b*.4;
+  for(let i=0;i<16;i++){const a=i/16*Math.PI*2;x.drawImage(w,Math.cos(a)*b,Math.sin(a)*b)}
+  x.shadowColor="transparent";x.drawImage(g,0,0);STK_CACHE.set(k,c);return c}
+function stickerSet(t,o){
+  const day=t.days.map(d=>d.emoji).filter(Boolean);const s=(t.name+" "+(t.destination||"")).toLowerCase();
+  let base=["✈️","📸","⭐","🌈","🍀","💛","🗺️","☀️"];
+  if(/크루즈|cruise|ship|배|바다|beach|해변|island|섬/.test(s))base=["🚢","⚓","🌊","🐬","🌴","☀️","🐚","🍹"];
+  else if(/캠핑|camp|산|mountain|hike|하이킹/.test(s))base=["⛺","🌲","🏔️","🔥","🌙","⭐","🍂","🥾"];
+  if(o.couple)base=["💕","💌","🌹","✨","🥂","💗",...base.slice(0,3)];
+  return [...new Set([...day,...base])]}
+function placeStickers(x,S,occ,set,seed,count){const u=S/100,m=S*.05,rnd=prng(seed),put=[];
+  const hit=(r,p)=>occ.concat(put).some(o=>r.x<o.x+o.w+p&&r.x+r.w+p>o.x&&r.y<o.y+o.h+p&&r.y+r.h+p>o.y);
+  for(let tries=0;tries<220&&put.length<count;tries++){const sz=(6.5+rnd()*4)*u;const r={x:m+rnd()*(S-2*m-sz),y:m+rnd()*(S-2*m-sz),w:sz,h:sz};
+    if(hit(r,2*u))continue;put.push(r);const ch=set[Math.floor(rnd()*set.length)];const c=stickerCanvas(ch,Math.round(sz));
+    x.save();x.translate(r.x+sz/2,r.y+sz/2);x.rotate((rnd()-.5)*.6);x.drawImage(c,-c.width/2,-c.height/2);x.restore()}
+  return put}
+function cornerSticker(x,p,set,k,u){if(k%2)return;const ch=set[(k*3+1)%set.length];const sz=Math.round(7*u);const c=stickerCanvas(ch,sz);
+  x.save();x.translate(p.x+p.w+.6*u,p.y-.6*u);x.rotate((k%4?.25:-.2));x.drawImage(c,-c.width/2,-c.height/2);x.restore()}
+function bubbleLayout(x,S,list,sc){sc=sc||1;const u0=S/100,u=u0*sc,m=Math.round(S*.07),top=m*1.3+15*u0,bottom=S-m,av=7*u,maxW=(S-2*m)*.72,pad=2.4*u;let y=top;const placed=[];
+  for(let k=0;k<list.length;k++){const it=list[k];x.font=`400 ${Math.round(3.2*u)}px ${PB_FONT}`;const lines=pbLines(x,it.text,maxW-2*pad,40);
+    const tw=Math.max(...lines.map(l=>x.measureText(l).width),x.measureText("— "+it.fromL).width*.8);const w=Math.min(maxW,tw+2*pad),h=pad*2+lines.length*4.8*u;
+    const tot=3.6*u+h;if(y+tot>bottom&&placed.length)return {placed,next:k};
+    const right=k%2===1;const bx=right?S-m-av-1.6*u-w:m+av+1.6*u;placed.push({it,lines,x:bx,y:y+3.6*u,w,h,right,k,av,sc});y+=tot+2.4*u0}
+  return {placed,next:list.length}}
+function pbLetters(t,o,pages){const mc=document.createElement("canvas").getContext("2d");
+  for(const g of lettersTo(t,o)){
+    if(g.list.length===1&&g.list[0].text.length>140){pages.push({type:"letter",to:g.to,from:g.list[0].fromL,text:g.list[0].text});continue}
+    if((o.roll||"ring")==="ring"&&ringFits(mc,g.list)){for(let k=0;k<g.list.length;k+=6)pages.push({type:"ring",to:g.to,n:g.list.length,list:g.list.slice(k,k+6),cont:k>0});continue}
+    const lay=(o.roll==="bubble")?bubbleLayout:rollLayout;
+    let rest=g.list,first=true;while(rest.length){let sc=1;for(const t2 of [1.6,1.45,1.3,1.15]){if(lay(mc,1000,rest,t2).next===rest.length){sc=t2;break}}
+      const {next}=lay(mc,1000,rest,sc);pages.push({type:o.roll==="bubble"?"bubble":"roll",to:g.to,n:g.list.length,list:rest.slice(0,next),cont:!first,sc});rest=rest.slice(next);first=false}}}
 function pbPlan(t,o){const pages=[{type:"cover"}];let nPh=0;
   const notesOf=key=>allNotes(key).filter(n=>o.priv||!n.mine||n.shared);
+  if(o.couple){const A=o.couple.a.id,B=o.couple.b.id;const who=n=>n.mine?L.me:n.by;
+    t.days.forEach((d,i)=>{const evs=evsOf(t,d.id).filter(e=>e.status==="done");const dn=notesOf("day-"+d.id);const list=[];let any=false;
+      const pagesOfDay=[];
+      evs.forEach(e=>{const ph=photosOf(e.id);const ns=notesOf("ev-"+e.id);
+        const pa=ph.filter(x=>(x.by||L.me)===A).map(x=>x.id),pb=ph.filter(x=>(x.by||L.me)===B).map(x=>x.id);
+        const na=ns.find(n=>who(n)===A),nb=ns.find(n=>who(n)===B);
+        if(!pa.length&&!pb.length){if(e.cat!=="move"||na||nb)list.push({e,n:na||nb});return}
+        nPh+=pa.length+pb.length;const k=Math.max(Math.ceil(pa.length/2),Math.ceil(pb.length/2));
+        for(let j=0;j<k;j++)pagesOfDay.push({type:"cpl",d,i,e,pa:pa.slice(j*2,j*2+2),pb:pb.slice(j*2,j*2+2),na:j?null:na,nb:j?null:nb,cont:j>0})});
+      if(!evs.length&&!dn.length)return;
+      pages.push({type:"day",d,i,notes:dn,list},...pagesOfDay)});
+    pbLetters(t,o,pages);pages.push({type:"end",nPh});return pages}
   t.days.forEach((d,i)=>{const evs=evsOf(t,d.id).filter(e=>e.status==="done");const dn=notesOf("day-"+d.id);
     const withPh=evs.filter(e=>photosOf(e.id).length),noPh=evs.filter(e=>!photosOf(e.id).length);
     if(!evs.length&&!dn.length)return;
     pages.push({type:"day",d,i,notes:dn,list:noPh.filter(e=>e.cat!=="move"||notesOf("ev-"+e.id).length).map(e=>({e,n:notesOf("ev-"+e.id)[0]}))});
     withPh.forEach(e=>{const ph=photosOf(e.id).map(p=>p.id);nPh+=ph.length;const ns=notesOf("ev-"+e.id);
       const per=Math.ceil(ph.length/Math.ceil(ph.length/4));for(let k=0;k<ph.length;k+=per)pages.push({type:"photos",d,i,e,ph:ph.slice(k,k+per),notes:k?[]:ns,cont:k>0})})});
-  pages.push({type:"end",nPh});return pages}
+  pbLetters(t,o,pages);pages.push({type:"end",nPh});return pages}
+const EN=()=>LANG==="en";const nNotes=(n,ko,en1,enN)=>EN()?`${n} ${n===1?en1:enN}`:`${n}${ko}`;const CONT=()=>EN()?" (continued)":" (계속)";
 async function pbDraw(t,pg,S,o,cover){
   const c=document.createElement("canvas");c.width=c.height=S;const x=c.getContext("2d");
-  const th=(THEMES[t.theme]||THEMES.teal).l,acc=th[0],soft=th[1],ink="#17232B",mut="#5E6B73";const m=Math.round(S*.07),u=S/100;
+  const th=o.couple?["#B5527A","#FBEAF1"]:(THEMES[t.theme]||THEMES.teal).l,acc=th[0],soft=th[1],ink=o.couple?"#3A2230":"#17232B",mut=o.couple?"#8A6878":"#5E6B73";
+  const SERIF=`Georgia,"Times New Roman",${PB_FONT}`;const m=Math.round(S*.07),u=S/100;
   const F=(sz,w)=>x.font=`${w||400} ${Math.round(sz*u)}px ${PB_FONT}`;x.textBaseline="top";
   x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);
   if(pg.type==="cover"){
     if(cover){pbFill(x,cover,0,0,S,S);const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
     else{x.fillStyle=acc;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
-    let y=S*.66;F(3.2,600);x.globalAlpha=.85;x.fillText(pbLines(x,(t.destination||"").toUpperCase(),S-2*m,1)[0]||"",m,y);x.globalAlpha=1;y+=5*u;
+    if(o.couple){const cp=o.couple;F(8,800);const ctl=pbLines(x,t.name,S-2*m,2).length;let y=Math.min(S*.6,S-m-(13+ctl*9.4+1.5+5+(cp.line?4.5:0))*u);x.font=`italic 400 ${Math.round(4*u)}px ${SERIF}`;x.globalAlpha=.9;
+      x.fillText(`${cp.a.label} & ${cp.b.label}`,m,y);x.globalAlpha=1;y+=6.5*u;
+      F(4.2,600);x.fillText(`${pName(t,cp.a.id)} & ${pName(t,cp.b.id)}`,m,y);y+=6.5*u;
+      F(8,800);y=pbText(x,pbLines(x,t.name,S-2*m,2),m,y,9.4*u)+1.5*u;
+      F(3.2,500);x.fillText(`${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`,m,y);y+=5*u;
+      if(cp.line){F(3.2,400);x.globalAlpha=.9;x.fillText(pbLines(x,cp.line,S-2*m,1)[0],m,y);x.globalAlpha=1}
+      return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.9))}
+    F(8.5,800);const tl=pbLines(x,t.name,S-2*m,2);let y=S-m-(5+tl.length*10+1.5+5.2+(t.people.length?5:0))*u;y=Math.min(y,S*.66);F(3.2,600);x.globalAlpha=.85;x.fillText(pbLines(x,(t.destination||"").toUpperCase(),S-2*m,1)[0]||"",m,y);x.globalAlpha=1;y+=5*u;
     F(8.5,800);y=pbText(x,pbLines(x,t.name,S-2*m,2),m,y,10*u)+1.5*u;
     F(3.4,500);x.fillText(`${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`,m,y);y+=5.2*u;
     if(t.people.length){F(3.4,400);x.fillText(t.people.map(p=>p.name).join(" · "),m,y)}
@@ -526,10 +650,98 @@ async function pbDraw(t,pg,S,o,cover){
     if(o.text){
       for(const n of pg.notes){const who=n.mine?pName(t,L.me):pName(t,n.by);F(3,600);x.fillStyle=acc;x.fillText(who||"",m,y);y+=4.4*u;
         x.fillStyle=ink;F(3.4,400);y=pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join("\n"),S-2*m,7),m,y,5*u)+3*u;if(y>S*.7)break}
-      if(pg.list.length&&y<S*.86){x.fillStyle=mut;F(2.8,700);x.fillText("이날 다닌 곳",m,y);y+=4.6*u;
+      if(pg.list.length&&y<S*.86){x.fillStyle=mut;F(2.8,700);x.fillText(tt("이날 다닌 곳"),m,y);y+=4.6*u;
         for(const {e,n} of pg.list){if(y>S-m-4*u)break;x.fillStyle=mut;F(2.9,500);x.fillText(e.start||"",m,y);x.fillStyle=ink;F(3.2,600);
           const line=e.title+(n&&n.mood?`  — ${n.mood}`:"");x.fillText(pbLines(x,line,S-2*m-12*u,1)[0]||"",m+12*u,y);y+=5*u}}
     }
+  }else if(pg.type==="ring"){
+    x.fillStyle="#FFFAF1";x.fillRect(0,0,S,S);x.strokeStyle=acc;x.globalAlpha=.25;x.setLineDash([.8*u,1.2*u]);x.lineWidth=.35*u;rrect(x,m*.5,m*.5,S-m,S-m,3*u);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+    const cx=S/2,cy=S/2,R0=13*u;x.fillStyle=soft;x.beginPath();x.arc(cx,cy,R0,0,Math.PI*2);x.fill();
+    x.strokeStyle=acc;x.globalAlpha=.5;x.setLineDash([.6*u,.9*u]);x.lineWidth=.3*u;x.beginPath();x.arc(cx,cy,R0+1.6*u,0,Math.PI*2);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+    x.textAlign="center";x.fillStyle=acc;x.font=`italic 400 ${Math.round(3.4*u)}px ${SERIF}`;x.fillText("To",cx,cy-9*u);
+    x.fillStyle=ink;let fz=6.2;F(fz,800);while(fz>3.4&&x.measureText(pg.to).width>R0*1.75){fz-=.2;F(fz,800)}x.fillText(pg.to,cx,cy-fz*.6*u);
+    x.fillStyle=mut;F(2.4,500);x.fillText(`${nNotes(pg.n,"개의 쪽지","note","notes")}${pg.cont?CONT():""}`,cx,cy+6.4*u);
+    if(!o.stk)[[.16,.2,"♥"],[.84,.18,"★"],[.12,.82,"✿"],[.88,.84,"♥"],[.5,.07,"✦"],[.5,.94,"✦"]].forEach(([a,b2,ch])=>{x.fillStyle=acc;x.globalAlpha=.35;F(3.4,400);x.fillText(ch,a*S,b2*S);x.globalAlpha=1});
+    const occ=[{x:cx-R0-3*u,y:cy-R0-3*u,w:2*R0+6*u,h:2*R0+6*u}];
+    const n=pg.list.length,sc=n<=2?1.4:n<=4?1.2:1,nw=(n<=2?60:n<=4?34:30)*u,su=u*sc;
+    pg.list.forEach((it,k)=>{const th=n===1?Math.PI/2:-Math.PI/2+k*2*Math.PI/n;
+      x.font=`500 ${Math.round(3*su)}px ${PB_FONT}`;const ln=pbLines(x,it.text,nw,7);const lh=4.4*su,h=ln.length*lh+4.4*su;
+      const rx=Math.max(0,S/2-m*.9-nw/2),ry=S/2-m*.9-h/2;const px=cx+rx*Math.cos(th),py=cy+ry*Math.sin(th);
+      const lw=Math.max(...ln.map(l=>x.measureText(l).width));occ.push({x:px-lw/2-1*u,y:py-h/2-1*u,w:lw+2*u,h:h+2*u});
+      x.save();x.translate(px,py);x.rotate(((k*37)%9-4)*.01);x.fillStyle=RING_INK[k%RING_INK.length];pbText(x,ln,0,-h/2,lh);
+      x.font=`italic 400 ${Math.round(2.8*su)}px ${SERIF}`;x.globalAlpha=.85;x.fillText("— "+it.fromL,0,-h/2+ln.length*lh+1*su);x.globalAlpha=1;x.restore()});
+    x.textAlign="left";if(o.stk)placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.to),7);
+  }else if(pg.type==="bubble"){
+    const g=x.createLinearGradient(0,0,0,S);g.addColorStop(0,"#FFF7FB");g.addColorStop(1,soft);x.fillStyle=g;x.fillRect(0,0,S,S);
+    x.fillStyle=acc;x.globalAlpha=.08;for(let i=0;i<14;i++)for(let j=0;j<14;j++){x.beginPath();x.arc((i+.5)*S/14,(j+.5)*S/14,.35*u,0,7);x.fill()}x.globalAlpha=1;
+    let y=m*1.3;x.textAlign="center";x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,S/2,y);
+    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 메시지","message","messages"),S/2,y+9*u);x.textAlign="left";
+    const {placed}=bubbleLayout(x,S,pg.list,pg.sc);const occ=[{x:S*.25,y:y-2*u,w:S*.5,h:13*u}];
+    placed.forEach(p=>{const su=u*(p.sc||1);const col=RING_INK[hashStr(p.it.from)%RING_INK.length];
+      const ax=p.right?S-m-p.av/2:m+p.av/2,ay=p.y+p.h-p.av/2;x.fillStyle=col;x.beginPath();x.arc(ax,ay,p.av/2,0,7);x.fill();
+      x.fillStyle="#fff";x.textAlign="center";F(3.2*(p.sc||1),700);x.fillText((p.it.fromL.split("·").pop().trim()||"?").slice(0,1),ax,ay-1.8*su);
+      x.fillStyle=mut;x.textAlign=p.right?"right":"left";x.font=`600 ${Math.round(2.5*su)}px ${PB_FONT}`;x.fillText(p.it.fromL,p.right?p.x+p.w:p.x,p.y-3.2*su);
+      x.shadowColor="rgba(0,0,0,.08)";x.shadowBlur=1.2*u;x.shadowOffsetY=.4*u;x.fillStyle=p.right?"#FFFFFF":"#FFF2C6";rrect(x,p.x,p.y,p.w,p.h,3*su);x.fill();
+      x.beginPath();if(p.right){x.moveTo(p.x+p.w-2*su,p.y+p.h-4*su);x.lineTo(p.x+p.w+1.8*su,p.y+p.h-1*su);x.lineTo(p.x+p.w-5*su,p.y+p.h)}else{x.moveTo(p.x+2*su,p.y+p.h-4*su);x.lineTo(p.x-1.8*su,p.y+p.h-1*su);x.lineTo(p.x+5*su,p.y+p.h)}x.fill();x.shadowColor="transparent";
+      x.fillStyle="#2E2A2C";x.textAlign="left";x.font=`400 ${Math.round(3.2*su)}px ${PB_FONT}`;pbText(x,p.lines,p.x+2.4*su,p.y+2.4*su,4.8*su);
+      occ.push({x:Math.min(p.x,ax-p.av/2)-1*u,y:p.y-4*su,w:p.w+p.av+3*u,h:p.h+4*su})});
+    if(o.stk)placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.to)+3,6);
+  }else if(pg.type==="roll"&&o.roll==="stamp"){
+    x.fillStyle="#F2EADC";x.fillRect(0,0,S,S);x.fillStyle="#E7DCC8";for(let i=0;i<900;i++){const r=prng(i*7+1);x.globalAlpha=.25;x.fillRect(r()*S,r()*S,.25*u,.25*u)}x.globalAlpha=1;
+    let y=m*1.3;x.fillStyle="#5A4632";x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
+    x.fillStyle="#8B7560";F(2.8,500);x.fillText(nNotes(pg.n,"통의 엽서","postcard","postcards"),m,y+9*u);
+    const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);const occ=[{x:m,y:y,w:S*.5,h:13*u}];
+    placed.forEach(p=>{const pc=document.createElement("canvas");pc.width=Math.ceil(p.w);pc.height=Math.ceil(p.h);const q=pc.getContext("2d");
+      q.fillStyle="#FFFDF8";q.fillRect(0,0,p.w,p.h);q.globalCompositeOperation="destination-out";const hr=.9*u,st=2.6*u;
+      for(let a=st/2;a<p.w;a+=st){q.beginPath();q.arc(a,0,hr,0,7);q.arc(a,p.h,hr,0,7);q.fill()}for(let b2=st/2;b2<p.h;b2+=st){q.beginPath();q.arc(0,b2,hr,0,7);q.arc(p.w,b2,hr,0,7);q.fill()}
+      x.save();x.translate(p.x+p.w/2,p.y+p.h/2);x.rotate((p.k%2?1:-1)*.012);x.translate(-p.w/2,-p.h/2);
+      x.shadowColor="rgba(60,40,20,.22)";x.shadowBlur=1.4*u;x.shadowOffsetY=.5*u;x.drawImage(pc,0,0);x.shadowColor="transparent";x.strokeStyle=ROLL_COL[p.k%ROLL_COL.length];x.lineWidth=.5*u;x.strokeRect(1.8*u,1.8*u,p.w-3.6*u,p.h-3.6*u);
+      x.fillStyle="#3A2E25";x.font=`400 ${Math.round(3.1*su)}px ${PB_FONT}`;pbText(x,p.lines,2.6*su,3*su,4.6*su);
+      x.save();x.translate(p.w-7*u,p.h-5.6*u);x.rotate(-.2);x.strokeStyle="rgba(90,60,120,.55)";x.lineWidth=.35*u;x.beginPath();x.arc(0,0,4.6*u,0,7);x.stroke();x.beginPath();x.arc(0,0,3.6*u,0,7);x.stroke();
+      x.fillStyle="rgba(90,60,120,.7)";x.textAlign="center";x.font=`700 ${Math.round(1.7*u)}px ${PB_FONT}`;x.fillText("FROM",0,-2.4*u);x.font=`700 ${Math.round(2.1*u)}px ${PB_FONT}`;x.fillText(pbLines(x,p.it.fromL.split("·").pop().trim(),6.4*u,1)[0]||"",0,-.6*u);x.restore();
+      x.restore();occ.push({x:p.x,y:p.y,w:p.w,h:p.h});if(o.stk)cornerSticker(x,p,stickerSet(t,o),p.k,u)});
+    if(o.stk)placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.to)+5,4);
+  }else if(pg.type==="roll"&&(o.roll||"ring")!=="note"){
+    x.fillStyle="#FBF7F0";x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
+    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 쪽지","note","notes"),m,y+9*u);
+    const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);
+    placed.forEach(p=>{x.save();x.translate(p.x+p.w/2,p.y+p.h/2);x.rotate((p.k%2?1:-1)*.008);x.translate(-p.w/2,-p.h/2);
+      x.shadowColor="rgba(60,40,30,.16)";x.shadowBlur=1.6*u;x.shadowOffsetY=.5*u;x.fillStyle="#FFFFFF";rrect(x,0,0,p.w,p.h,1.6*u);x.fill();x.shadowColor="transparent";
+      x.save();x.translate(p.w/2,0);x.rotate((p.k%2?1:-1)*.06);x.fillStyle=ROLL_COL[p.k%ROLL_COL.length];x.globalAlpha=.85;x.fillRect(-7*u,-1.6*u,14*u,3.4*u);x.restore();x.globalAlpha=1;
+      x.fillStyle="#3A3330";x.font=`400 ${Math.round(3.1*su)}px ${PB_FONT}`;pbText(x,p.lines,2.6*su,3.2*su,4.6*su);
+      x.fillStyle=acc;x.font=`italic 400 ${Math.round(2.9*su)}px ${SERIF}`;x.textAlign="right";x.fillText("— "+p.it.fromL,p.w-2.6*su,p.h-2.6*su-3.4*su);x.textAlign="left";x.restore();if(o.stk)cornerSticker(x,p,stickerSet(t,o),p.k+1,u)});
+    if(o.stk)placeStickers(x,S,[{x:m,y:m,w:S*.5,h:16*u},...placed.map(p=>({x:p.x,y:p.y-2*u,w:p.w,h:p.h+2*u}))],stickerSet(t,o),hashStr(pg.to)+1,4);
+  }else if(pg.type==="roll"){
+    x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
+    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 쪽지","note","notes"),m,y+9*u);
+    const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);
+    placed.forEach(p=>{x.save();x.translate(p.x+p.w/2,p.y+p.h/2);x.rotate((p.k%2?1:-1)*.012);x.translate(-p.w/2,-p.h/2);
+      x.shadowColor="rgba(0,0,0,.12)";x.shadowBlur=1.2*u;x.shadowOffsetY=.4*u;x.fillStyle=ROLL_COL[p.k%ROLL_COL.length];x.fillRect(0,0,p.w,p.h);x.shadowColor="transparent";
+      x.fillStyle="#2B2B2B";x.font=`400 ${Math.round(3.1*su)}px ${PB_FONT}`;pbText(x,p.lines,2.6*su,2.6*su,4.6*su);
+      x.fillStyle="#6B5B63";x.font=`italic 400 ${Math.round(2.9*su)}px ${SERIF}`;x.textAlign="right";x.fillText("— "+p.it.fromL,p.w-2.6*su,p.h-2.6*su-3.4*su);x.textAlign="left";x.restore();if(o.stk)cornerSticker(x,p,stickerSet(t,o),p.k,u)});
+    if(o.stk)placeStickers(x,S,[{x:m,y:m,w:S*.5,h:16*u},...placed.map(p=>({x:p.x,y:p.y,w:p.w,h:p.h}))],stickerSet(t,o),hashStr(pg.to)+2,4);
+  }else if(pg.type==="letter"){
+    x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.4;x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}`,m,y);y+=12*u;
+    x.fillStyle=ink;F(3.5,400);const lines=pbLines(x,pg.text,S-2*m,Math.floor((S-m*2.6-y)/(5.6*u)));pbText(x,lines,m,y,5.6*u);
+    x.fillStyle=acc;x.font=`italic 400 ${Math.round(3.6*u)}px ${SERIF}`;x.textAlign="right";x.fillText(`— ${pg.from}`,S-m,S-m*1.3);x.textAlign="left";
+  }else if(pg.type==="cpl"){
+    const e=pg.e,cp=o.couple;let y=m*.9;
+    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}${e.start?"  ·  "+e.start:""}`,m,y);y+=4.2*u;
+    x.fillStyle=ink;F(4.4,800);x.fillText(pbLines(x,e.title+(pg.cont?CONT():""),S-2*m,1)[0],m,y);y+=6*u;
+    if(e.place&&!pg.cont){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,e.place,S-2*m,1)[0],m,y)}y+=5.5*u;
+    const gap=Math.round(2.4*u),cw=(S-2*m-gap)/2,top=y,bottom=S-m*.8;
+    const txtOf=n=>o.text&&n?[n.mood,n.diary].filter(Boolean).join(" — "):"";
+    const emptyA=!pg.pa.length&&!txtOf(pg.na),emptyB=!pg.pb.length&&!txtOf(pg.nb);
+    const col=async(cx,label,ids,n,cw)=>{let yy=top;x.fillStyle=acc;x.font=`italic 600 ${Math.round(3.6*u)}px ${SERIF}`;x.fillText(label,cx,yy);yy+=5.4*u;
+      const txt=txtOf(n);F(2.9,400);const tl=txt?pbLines(x,txt,cw,pg.cont?0:4):[];const th2=tl.length?tl.length*4.3*u+1.5*u:0;
+      const ph=bottom-th2-yy;const gh=Math.round(1.2*u);
+      if(ids.length){const imgs=[];for(const id of ids)imgs.push(await pbImage(id,o.orig));const h=ids.length>1?(ph-gh)/2:ph;
+        imgs.forEach((im,k)=>{const by=yy+k*(h+gh);if(im){pbFill(x,im,cx,by,cw,h);im.close&&im.close()}else{x.fillStyle="#EEE4E8";x.fillRect(cx,by,cw,h)}})}
+      else{x.fillStyle=soft;x.fillRect(cx,top+5.4*u,cw,bottom-top-5.4*u);x.fillStyle=ink;F(3.6,500);const q=pbLines(x,"“"+txt+"”",cw-6*u,8);
+        const qh=q.length*5.4*u;pbText(x,q,cx+3*u,top+5.4*u+(bottom-top-5.4*u-qh)/2,5.4*u);return}
+      if(tl.length){x.fillStyle=ink;F(2.9,400);pbText(x,tl,cx,bottom-th2+1.5*u,4.3*u)}};
+    if(emptyA||emptyB){const sd=emptyA?[cp.b.label,pg.pb,pg.nb]:[cp.a.label,pg.pa,pg.na];await col(m,sd[0],sd[1],sd[2],S-2*m)}
+    else{await col(m,cp.a.label,pg.pa,pg.na,cw);await col(m+cw+gap,cp.b.label,pg.pb,pg.nb,cw);x.fillStyle=soft;x.fillRect(m+cw+gap/2-.5,top,1,bottom-top)}
   }else if(pg.type==="photos"){
     const capH=o.text&&!pg.cont?S*.2:S*.13;const W=S-2*m,H=S-m-capH-m*.4;const gap=Math.round(1.2*u);
     const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
@@ -542,20 +754,21 @@ async function pbDraw(t,pg,S,o,cover){
     imgs.forEach(im=>im&&im.close&&im.close());
     let y=Y+H+m*.45;const e=pg.e;
     x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}${e.start?"  ·  "+e.start:""}`,m,y);y+=4.2*u;
-    x.fillStyle=ink;F(4,800);x.fillText(pbLines(x,e.title+(pg.cont?" (계속)":""),W,1)[0],m,y);y+=5.6*u;
-    if(o.text&&!pg.cont){const w=withNames(t,e);const sub=[e.place,w&&w!=="모두"?"함께: "+w:""].filter(Boolean).join("  ·  ");
+    x.fillStyle=ink;F(4,800);x.fillText(pbLines(x,e.title+(pg.cont?CONT():""),W,1)[0],m,y);y+=5.6*u;
+    if(o.text&&!pg.cont){const w=withNames(t,e);const sub=[e.place,w&&w!=="모두"?(EN()?"With: ":"함께: ")+w:""].filter(Boolean).join("  ·  ");
       if(sub){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,sub,W,1)[0],m,y);y+=4.4*u}
       const n=pg.notes[0];if(n){x.fillStyle=ink;F(3,400);pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join(" — "),W,Math.max(1,Math.floor((S-m*.6-y)/(4.4*u)))),m,y,4.4*u)}}
   }else{
-    x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText("함께한 시간",m,y);y+=8*u;
-    const done=t.events.filter(e=>e.status==="done"&&e.cat!=="move").length;const stats=[[`${t.days.length}일`,"여행"],[`${done}곳`,"다닌 곳"],[`${pg.nPh}장`,"사진"]];
-    if(sum(t.expenses))stats.push([money(sum(t.expenses),t),"쓴 돈"]);
+    x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText(tt("함께한 시간"),m,y);y+=8*u;
+    const done=t.events.filter(e=>e.status==="done"&&e.cat!=="move").length;const stats=EN()?[[`${t.days.length}`,"Days"],[`${done}`,"Places"],[`${pg.nPh}`,"Photos"]]:[[`${t.days.length}일`,"여행"],[`${done}곳`,"다닌 곳"],[`${pg.nPh}장`,"사진"]];
+    if(sum(t.expenses))stats.push([money(sum(t.expenses),t),EN()?"Spent":"쓴 돈"]);
     const cw=(S-2*m)/stats.length;stats.forEach(([a,b],k)=>{x.fillStyle=ink;F(6,800);x.fillText(a,m+k*cw,y);x.fillStyle=mut;F(2.8,500);x.fillText(b,m+k*cw,y+8*u)});y+=17*u;
-    if(t.people.length){x.fillStyle=mut;F(2.8,700);x.fillText("함께한 사람",m,y);y+=4.6*u;x.fillStyle=ink;F(3.8,600);y=pbText(x,pbLines(x,t.people.map(p=>p.name).join(" · "),S-2*m,2),m,y,5.4*u)+4*u}
+    if(t.people.length){x.fillStyle=mut;F(2.8,700);x.fillText(tt("함께한 사람"),m,y);y+=4.6*u;x.fillStyle=ink;F(3.8,600);y=pbText(x,pbLines(x,t.people.map(p=>p.name).join(" · "),S-2*m,2),m,y,5.4*u)+4*u}
     const held=t.events.filter(e=>e.status==="hold");
-    if(held.length){x.fillStyle=mut;F(2.8,700);x.fillText("다음에 꼭 갈 곳",m,y);y+=4.6*u;x.fillStyle=ink;F(3.2,500);
+    if(held.length){x.fillStyle=mut;F(2.8,700);x.fillText(tt("다음에 꼭 갈 곳"),m,y);y+=4.6*u;x.fillStyle=ink;F(3.2,500);
       for(const e of held.slice(0,8)){x.fillText("· "+pbLines(x,e.title,S-2*m-4*u,1)[0],m,y);y+=4.8*u}}
-    x.fillStyle=mut;F(2.4,500);x.fillText("여행 일정 노트로 만든 사진첩",m,S-m)}
+    if(o.couple){x.fillStyle=acc;x.font=`italic 400 ${Math.round(5*u)}px ${SERIF}`;x.fillText(`${o.couple.a.label} & ${o.couple.b.label}`,m,S-m-9*u)}
+    x.fillStyle=mut;F(2.4,500);x.fillText(EN()?"Made with GoTripJ":"같이가J로 만든 사진첩",m,S-m)}
   return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.9))}
 async function pdfFromJpegs(list,pt){const parts=[],offs=[];let off=0;
   const push=b=>{if(typeof b==="string")b=enc.encode(b);parts.push(b);off+=b instanceof Blob?b.size:b.byteLength};
@@ -576,18 +789,27 @@ function photobookModal(){const t=T;if(!t)return;
     <p class="hint">이 폰에 있는 사진만 들어가요. 다른 사람 사진까지 넣으려면 먼저 ⋯ → '사진 모으기'로 합쳐 주세요.</p>
     <div class="field"><label for="pb-q">화질</label><select class="inp" id="pb-q"><option value="1600">보기·공유용 (가벼움)</option><option value="2400">인쇄용 (고화질, 원본 사진 사용)</option></select></div>
     <div class="field"><label for="pb-f">파일 형태</label><select class="inp" id="pb-f"><option value="pdf">PDF 한 파일 (보기, 인쇄소 맡기기)</option><option value="jpg">페이지별 사진 묶음 (Mixbook·Shutterfly에 한 장씩 꽉 차게 올리기)</option></select></div>
+    ${t.people.length>=2?`<div class="field"><label for="pb-d">디자인</label><select class="inp" id="pb-d"><option value="basic">기본</option><option value="couple">커플 (Her · His)</option></select></div>
+    <div id="pbCpl" hidden><p class="hint">일정마다 두 칸으로 나눠, 각자 찍은 사진과 각자 쓴 한 줄을 나란히 넣어요.</p>
+      <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
+      <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div></div>`:""}
+    <div class="field"><label for="pb-r">롤링페이퍼 모양</label><select class="inp" id="pb-r"><option value="ring">가운데 이름 + 둘레 쪽지</option><option value="bubble">말풍선 메시지</option><option value="stamp">우표 엽서</option><option value="card">편지 카드 + 마스킹테이프</option><option value="note">포스트잇</option></select></div>
+    <label class="row" style="gap:8px"><input type="checkbox" id="pb-s" checked> 롤링페이퍼에 스티커 붙이기 <span class="hint">(여행 이모지로 자동)</span></label>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-t" checked> 기록(한 줄 감정 · 일기) 넣기</label>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-p" checked> 나만 보기 기록도 넣기 <span class="hint">(남에게 줄 사진첩이면 끄세요)</span></label>
     <div id="pbOut" class="hint"></div><div id="pbPrev" class="pbprev"></div>
     <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">닫기</button><button type="button" class="btn primary" id="pbGo"${pages.length<3?" disabled":""}>만들기</button></div></div>`);
+  const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
   m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");prev.innerHTML="";
-    const S=+m.querySelector("#pb-q").value,fmt=m.querySelector("#pb-f").value;const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,orig:S>2000};
+    const S=+m.querySelector("#pb-q").value,fmt=m.querySelector("#pb-f").value;const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,orig:S>2000,roll:m.querySelector("#pb-r").value,stk:m.querySelector("#pb-s").checked};
+    if(dSel&&dSel.value==="couple"){const g=k=>({id:m.querySelector("#pb-p"+k).value,label:m.querySelector("#pb-l"+k).value.trim()||(k==="a"?"Her":"His")});
+      o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";b.disabled=false;return}}
     try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
       for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S});
         if(k<4){const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽 미리보기`;prev.appendChild(im)}}
       cover&&cover.close&&cover.close();const day=t.start||todayISO();
-      if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`tripnote-photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`)}
-      else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`tripnote-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`)}
+      if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`)}
+      else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`)}
     }catch(e){console.error(e);out.textContent="사진첩을 만들지 못했어요. 화질을 '보기·공유용'으로 바꿔 다시 해 보세요."}
     b.disabled=false}}
 
@@ -772,7 +994,7 @@ async function createTrip(o,tid){
   const meId=o.meIndex!=null&&people[o.meIndex]?people[o.meIndex].id:"";
   const b=chunkedBatch();let ops=1;
   b.set(FB.doc(fs,"trips",tid),{name:o.name||"새 여행",destination:o.destination||"",start:o.start,end:o.end,currency:o.currency||"$",budget:Number(o.budget)||0,days,dayTitles:titles,dayEmoji:emo,theme:THEMES[o.theme]?o.theme:"teal",people,createdBy:myUid,owners:[myUid],viewers:[],members:meId?{[myUid]:meId}:{},createdAt:Date.now(),updatedAt:Date.now(),example:!!o.example});
-  const ck=(o.checklist&&o.checklist.length?o.checklist.map(c=>[PREP[c.cat]?c.cat:"etc",String(c.text||c),!!c.done]):DEFAULT_CK);
+  const ck=(o.checklist&&o.checklist.length?o.checklist.map(c=>[PREP[c.cat]?c.cat:"etc",String(c.text||c),!!c.done]):DEFAULT_CK.map(([c,x])=>[c,tt(x)]));
   ck.forEach(([c,x,dn],i)=>{b.set(FB.doc(fs,"trips",tid,"checklist","c"+uid()),{cat:c,text:x,done:!!dn,order:i});ops++});
   (o.days||[]).forEach(d=>{const did=byDate[d.date];if(!did)return;(d.events||[]).forEach(e=>{if(ops>480)return;b.set(FB.doc(fs,"trips",tid,"events","e"+uid()),evFrom(e,did,people));ops++})});
   (o.expenses||[]).forEach(x=>{b.set(FB.doc(fs,"trips",tid,"expenses","x"+uid()),{title:x.title||"",amount:Number(x.amount)||0,cat:CATS[x.cat]?x.cat:"etc",dayId:byDate[x.date]||"",paidBy:people[x.paidByIndex]?.id||"",memo:x.memo||"",evId:"",receiptBy:"",createdAt:Date.now(),by:""});ops++});
@@ -816,6 +1038,18 @@ function whoModal(){
 function setMe(id){const old=L.me;if(old===id)return;flushNotes();if(T)w(FB.updateDoc(ref.trip(),{["members."+myUid]:id}));
   if(old&&T){T.notes.filter(n=>n.author===old).forEach(n=>{const {id:nid,...rest}=n;w(FB.setDoc(ref.d("notes",n.key+"~"+id),{...rest,author:id}));w(FB.deleteDoc(ref.d("notes",nid)))})}
   L.me=id;Object.values(L.photos).forEach(a=>a.forEach(p=>{if(!p.by||p.by===old)p.by=id}));putLocal();render();toast(`${pName(T,id)}(으)로 정했어요`)}
+function letterCard(t){const cnt=key=>allNotes(key).filter(n=>!n.mine&&n.diary&&n.diary.trim()).length;
+  const rows=[...t.people.filter(p=>p.id!==L.me).map(p=>({to:p.id,name:p.name})),{to:"all",name:"우리 모두"}];
+  const toMe=L.me?cnt("letter-"+L.me):0;
+  return `<div class="card"><h3>💌 롤링페이퍼</h3><p class="hint">함께한 사람에게 한 명씩 쪽지를 남겨요. 사진첩 마지막에 "To 이름" 페이지로 모여요. 다른 사람이 쓴 쪽지는 사진첩을 만들 때 처음 열려요.</p>
+    ${toMe?`<p class="hint">✉️ <span data-nt>${LANG==="en"?(toMe===1?"1 note is waiting for you":toMe+" notes are waiting for you"):"나에게 온 쪽지 "+toMe+"개가 기다리고 있어요"}</span></p>`:""}
+    <div class="lrows">${rows.map(r=>{const key=r.to==="all"?"letter":"letter-"+r.to;const mine=myNote(key).diary;const n=cnt(key);
+      return `<div class="lrow"><span><b>To ${esc(r.name)}</b>${n?` <span class="hint">· 다른 사람 쪽지 ${n}개</span>`:""}</span><button class="btn sm${mine?"":" primary"}" data-act="editLetter" data-to="${r.to}">${mine?"✓ 고치기":"쓰기"}</button></div>`}).join("")}</div></div>`}
+function letterModal(to){if(!L.me){whoModal();return}const key=to==="all"?"letter":"letter-"+to;const n=myNote(key);const name=to==="all"?"우리 모두":pName(T,to);
+  const m=modal(`<form class="card"><h3>💌 To ${esc(name)}</h3><p class="hint">${to==="all"?"함께한 모두에게 쓰는 쪽지예요.":esc(name)+"에게만 쓰는 쪽지예요. 사진첩의 'To "+esc(name)+"' 페이지에 붙어요."} 짧아도 좋아요.</p>
+    <textarea class="inp" id="lt-text" rows="8" placeholder="이번 여행에서 고마웠던 것, 기억에 남는 순간…">${esc(n.diary||"")}</textarea>
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">저장</button></div></form>`);
+  m.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();setMyNote(key,{diary:m.querySelector("#lt-text").value,shared:true},true);closeModalEl(m);toast("쪽지를 저장했어요");setTimeout(render,80)})}
 function journalModal(dayId){
   const d=T.days.find(x=>x.id===dayId);const key="day-"+dayId;const n=myNote(key);let shared=n.shared;
   const m=modal(`<form class="card"><h3>${fmtDate(d.date,true)} 내 하루 글</h3>
@@ -834,6 +1068,14 @@ const FORMAT_HINT=`'여행 일정 노트' 앱에 붙여넣을 수 있게 JSON으
    "restaurants":[{"name":"식당","cuisine":"종류","rating":4.5,"ratingSource":"Google","price":"$$","distance":"도보 5분","address":"주소","menu":[{"name":"메뉴","price":"$12"}],"note":"팁"}]}]}],
  "checklist":[{"cat":"doc|book|pack|etc","text":"준비할 것"}]}
 맛집만일 때: [{"name":...,"cuisine":...,"rating":...,"ratingSource":...,"price":...,"distance":...,"address":...,"menu":[...],"note":...}]`;
+const FORMAT_HINT_EN=`Reply with JSON only so I can paste it into the GoTripJ app. One code block, exactly in this format.
+For a full trip:
+{"type":"tripnote","name":"Trip name","destination":"City","start":"YYYY-MM-DD","end":"YYYY-MM-DD","people":["Me","Mom"],
+ "days":[{"date":"YYYY-MM-DD","title":"Theme of the day","emoji":"🚢","events":[{"start":"HH:MM","end":"HH:MM","title":"Plan","cat":"stay|sight|food|move|shop|etc","place":"Place name (destination if it's a drive)","address":"Address","origin":"Start point of a drive (omit if none)","stops":["Stop"],"with":["Names of people in this plan (omit if everyone)"],"memo":"Memo",
+   "restaurants":[{"name":"Restaurant","cuisine":"Cuisine","rating":4.5,"ratingSource":"Google","price":"$$","distance":"5 min walk","address":"Address","menu":[{"name":"Dish","price":"$12"}],"note":"Tip"}]}]}],
+ "checklist":[{"cat":"doc|book|pack|etc","text":"Thing to prepare"}]}
+For restaurants only: [{"name":...,"cuisine":...,"rating":...,"ratingSource":...,"price":...,"distance":...,"address":...,"menu":[...],"note":...}]
+Write all text in English.`;
 function parseLoose(text){
   let s=String(text||"").trim().replace(/^```(?:json)?/i,"").replace(/```\s*$/,"").trim();
   const i=Math.min(...["{","["].map(c=>{const k=s.indexOf(c);return k<0?Infinity:k}));if(i===Infinity)throw new Error("no json");
@@ -906,10 +1148,10 @@ async function settingsModal(){
       <button type="button" class="btn" data-act="impBackup">백업 불러오기</button>
       <div class="out" id="bkOut"></div>
       ${installEvt?`<button type="button" class="btn primary" data-act="install">홈 화면에 앱 설치</button>`:""}
-    </div></div>`);
+    </div><hr><p class="hint" style="text-align:center">${APP.ko} (${APP.en}) · <a href="privacy.html">개인정보 처리방침</a> · <a href="terms.html">이용약관</a></p></div>`);
   try{const est=await navigator.storage.estimate();const per=await (navigator.storage.persisted?navigator.storage.persisted():false);const n=(await dbKeys("photos")).length;
     const origs=(await dbAll("orig").catch(()=>[])).filter(o=>!curId||o.tid===curId);const ob=m.querySelector("#clearOrigBtn");if(ob)ob.textContent=origs.length?`앱에 보관 중인 원본 정리 (${origs.length}장 · ${fmtSize(origs.reduce((a,o)=>a+(o.blob.size||0),0))})`:"보관 중인 원본 없음";if(ob&&!origs.length)ob.disabled=true;
-    m.querySelector("#stInfo").innerHTML=`사진 ${n}장 · 사용 ${fmtSize(est.usage||0)}${est.quota?` / 가능 ${fmtSize(est.quota)}`:""} · ${per?"자동 삭제 방지 켜짐":"<span style='color:var(--hold)'>자동 삭제 방지 꺼짐: 앱을 홈 화면에 설치하면 켜져요</span>"}`}
+    m.querySelector("#stInfo").innerHTML=`${LANG==="en"?n+(n===1?" photo":" photos"):"사진 "+n+"장"} · 사용 ${fmtSize(est.usage||0)}${est.quota?` / 가능 ${fmtSize(est.quota)}`:""} · ${per?"자동 삭제 방지 켜짐":"<span style='color:var(--hold)'>자동 삭제 방지 꺼짐: 앱을 홈 화면에 설치하면 켜져요</span>"}`}
   catch(e){m.querySelector("#stInfo").textContent=""}
 }
 const seg=(k,opts)=>`<div class="seg wide" role="group">${opts.map(([v,n])=>`<button type="button" data-act="setPref" data-k="${k}" data-v="${v}" aria-pressed="${prefs[k]===v}">${n}</button>`).join("")}</div>`;
@@ -917,6 +1159,7 @@ function decorHTML(){const t=T;
   return `<h3>꾸미기 <button type="button" class="btn sm" data-act="closeModal">닫기</button></h3>
   ${t?`<div class="field"><label>이 여행 색 <span class="hint">함께하는 모두에게 보여요</span></label><div class="swatches">${Object.entries(THEMES).map(([k,v])=>`<button type="button" class="sw" data-act="setTheme" data-v="${k}" aria-pressed="${t.theme===k}" style="--sw:${(isDark()?v.d:v.l)[0]}"><i></i>${v.n}</button>`).join("")}</div></div><hr>`:""}
   <span class="eyebrow">이 폰에서만 바뀌어요</span>
+  <div class="field"><label>언어 · Language</label><div class="seg" role="group">${[["auto","자동 (폰 설정)"],["ko","한국어"],["en","English"]].map(([k,n])=>`<button type="button" data-act="setLang" data-v="${k}" aria-pressed="${(prefs.lang||"auto")===k}">${n}</button>`).join("")}</div></div>
   <div class="field"><label>화면 밝기</label>${seg("appearance",[["auto","폰 설정 따라"],["light","밝게"],["dark","어둡게"]])}</div>
   <div class="field"><label>글씨 크기</label>${seg("font",[["normal","보통"],["large","크게"],["xl","아주 크게"]])}</div>
   <div class="field"><label>운전 안내에 쓸 앱</label>${seg("nav",[["google","Google 지도"],["waze","Waze"],["apple","Apple 지도"]])}</div>
@@ -950,7 +1193,7 @@ async function exportMine(out,incPriv,incOrig,dayId){
   if(!photos.length&&!cover&&!notes.length){out.textContent="보낼 사진이 아직 없어요.";return}
   const nm=(pName(T,L.me)||"me").replace(/[^\w가-힣]/g,"");
   const blob=await makeZip(files);const big=blob.size>80*1048576;
-  offerFile(out,blob,`tripnote-photos-${encodeURIComponent(nm)===nm?nm:"member"}-${todayISO()}${dayId?"-day"+(T.days.findIndex(d=>d.id===dayId)+1):""}.zip`,
+  offerFile(out,blob,`gotripj-photos-${encodeURIComponent(nm)===nm?nm:"member"}-${todayISO()}${dayId?"-day"+(T.days.findIndex(d=>d.id===dayId)+1):""}.zip`,
     `사진 ${photos.length}장${cover?" + 표지":""}${origN?` (원본 ${origN}장 포함)`:""}${notes.length?` + 기록 ${notes.length}개`:""}.`+(origMissing?` 원본을 정리한 사진 ${origMissing}장은 가벼운 버전만 들어갔어요.`:"")+(big?" 파일이 커요. Google 드라이브로 보내거나, 날짜별로 나눠서 보내세요.":" 여행기를 만들 사람에게 카톡·메일·드라이브로 보내세요."));
 }
 function origSaveUI(out,list){
@@ -997,7 +1240,7 @@ async function exportBackup(out){
   const files=[{name:"backup.json",data:enc.encode(JSON.stringify({app:"tripnote-share",format:2,exportedAt:new Date().toISOString(),locals:Object.values(locals),snaps}))}];
   for(const id of referenced()){const r=await dbGet("photos",id).catch(()=>null);if(r)files.push({name:"photos/"+id+".jpg",data:new Uint8Array(await r.blob.arrayBuffer())})}
   try{localStorage.setItem("tripnote:lastBackup",String(Date.now()))}catch(e){}
-  offerFile(out,await makeZip(files),`tripnote-backup-${todayISO()}.zip`,"Google Drive 같은 폰 밖의 곳에도 한 부 보관해 두세요.");
+  offerFile(out,await makeZip(files),`gotripj-backup-${todayISO()}.zip`,"Google Drive 같은 폰 밖의 곳에도 한 부 보관해 두세요.");
 }
 async function importBackup(out){
   const [f]=await pickFiles(false,false,".zip,application/zip");if(!f)return;
@@ -1025,7 +1268,7 @@ const slug=s=>String(s||"").replace(/[\\/:*?"<>|\s]+/g,"_").replace(/^_+|_+$/g,"
 async function exportJournal(out,max){
   const t=T;if(!t)return;out.textContent="여행기 파일을 만드는 중…";flushAll();
   const files=[],L2=[],jobs=[];const nm=id=>pName(t,id)||"누군가";
-  if(L.cover)jobs.push({name:"사진/00_표지.jpg",id:L.cover});
+  const PHD=LANG==="en"?"photos/":"사진/";if(L.cover)jobs.push({name:LANG==="en"?"photos/00_cover.jpg":"사진/00_표지.jpg",id:L.cover});
   L2.push(`# ${t.name}`,"",`- 여행지: ${t.destination||"-"}`,`- 기간: ${fmtDate(t.start,true)} ~ ${fmtDate(t.end,true)} (${t.days.length}일)`,`- 함께: ${t.people.map(p=>p.name).join(", ")||"-"}`,`- 이 파일을 만든 사람: ${nm(L.me)}`,`- 표지 사진: ${L.cover?"사진/00_표지.jpg":"없음"}`,"",
     "> '여행 일정 노트' 앱에서 내보낸 여행 기록입니다. 이 압축 파일을 Claude에게 올리고 여행기를 만들어 달라고 하세요. 기록마다 쓴 사람, 사진마다 찍은 사람이 적혀 있어요.","");
   const evJson=[];const noteLines=ns=>ns.flatMap(n=>[`- ${n.mine?nm(L.me):nm(n.by)}의 기록${n.mood?` (한 줄: ${n.mood})`:""}${reactText(n)}${n.diary?":":""}`,...(n.diary?n.diary.trim().split("\n").map(x=>"  > "+x):[])]);
@@ -1034,10 +1277,10 @@ async function exportJournal(out,max){
     const dn=allNotes("day-"+d.id);if(dn.length)L2.push(...noteLines(dn),"");
     const evs=evsOf(t,d.id).filter(e=>e.status!=="hold");if(!evs.length)L2.push("(일정 없음)","");
     evs.forEach(e=>{
-      const names=photosOf(e.id).map((p,j)=>{const n=`사진/D${String(i+1).padStart(2,"0")}_${(e.start||"0000").replace(":","")}_${slug(e.title)}_${j+1}.jpg`;jobs.push({name:n,id:p.id});return `${n} (${nm(p.by||L.me)})`});
+      const names=photosOf(e.id).map((p,j)=>{const n=`${PHD}D${String(i+1).padStart(2,"0")}_${(e.start||"0000").replace(":","")}_${slug(e.title)}_${j+1}.jpg`;jobs.push({name:n,id:p.id});return `${n} (${nm(p.by||L.me)})`});
       const w=withNames(t,e);const exs=t.expenses.filter(x=>x.evId===e.id);const ns=allNotes("ev-"+e.id);
-      L2.push(`### ${e.start||""}${e.end?"–"+e.end:""} ${e.title} [${CATS[e.cat]}] · ${ST[e.status]}`);
-      if(e.place||e.address)L2.push(`- ${e.cat==="move"?"도착지":"장소"}: ${e.place||""}${e.address?` (${e.address})`:""}`);
+      L2.push(`### ${e.start||""}${e.end?"–"+e.end:""} ${e.title} [${tt(CATS[e.cat])}] · ${tt(ST[e.status])}`);
+      if(e.place||e.address)L2.push(`- ${tt(e.cat==="move"?"도착지":"장소")}: ${e.place||""}${e.address?` (${e.address})`:""}`);
       if(e.cat==="move"&&(e.origin||(e.stops||[]).length))L2.push(`- 경로: ${[e.origin||"(현재 위치)",...(e.stops||[]).filter(Boolean),e.place||e.address].join(" → ")}`);
       if(w)L2.push(`- 함께: ${w}`);if(e.memo)L2.push(`- 메모: ${e.memo.replace(/\n/g," / ")}`);
       if(ns.length)L2.push(...noteLines(ns));
@@ -1056,10 +1299,10 @@ async function exportJournal(out,max){
   const tj={name:t.name,destination:t.destination,start:t.start,end:t.end,people:t.people.map(p=>p.name),cover:L.cover?"사진/00_표지.jpg":null,currency:t.currency,budget:t.budget,
     days:t.days.map((d,i)=>({day:i+1,date:d.date,title:d.title,notes:allNotes("day-"+d.id).map(n=>({author:n.mine?nm(L.me):nm(n.by),diary:n.diary}))})),events:evJson,
     expenses:t.expenses.map(x=>({date:t.days.find(d=>d.id===x.dayId)?.date||null,title:x.title,amount:x.amount,category:CATS[x.cat],paidBy:nm(x.paidBy),memo:x.memo,event:t.events.find(e=>e.id===x.evId)?.title||null}))};
-  files.push({name:"여행정보.md",data:enc.encode(L2.join("\n"))},{name:"trip.json",data:enc.encode(JSON.stringify(tj,null,1))});
+  files.push({name:LANG==="en"?"trip-info.md":"여행정보.md",data:enc.encode(L2.map(l=>tt(l)).join("\n"))},{name:"trip.json",data:enc.encode(JSON.stringify(tj,null,1))});
   let k=0;for(const j of jobs){k++;out.textContent=`사진 정리 중… ${k}/${jobs.length}`;const r=await dbGet("photos",j.id).catch(()=>null);if(!r)continue;const b=await resizeBlob(r.blob,max,.8);files.push({name:j.name,data:new Uint8Array(await b.arrayBuffer())})}
   const blob=await makeZip(files);
-  offerFile(out,blob,`tripnote-journal-${t.start||todayISO()}.zip`,blob.size>25*1048576?"파일이 커요. 올리기 어려우면 사진 크기를 '작게'로 바꿔 다시 만들어 보세요.":"Claude 채팅에 이 파일을 올리고 \"여행기 만들어줘\"라고 하세요.");
+  offerFile(out,blob,`gotripj-journal-${t.start||todayISO()}.zip`,blob.size>25*1048576?"파일이 커요. 올리기 어려우면 사진 크기를 '작게'로 바꿔 다시 만들어 보세요.":"Claude 채팅에 이 파일을 올리고 \"여행기 만들어줘\"라고 하세요.");
 }
 async function leaveTrip(){const tid=curId;delete locals[tid];await dbDel("local",tid).catch(()=>{});gc();const next=Object.keys(locals)[0]||null;selectTrip(next);toast("이 폰에서 여행을 지웠어요")}
 function delTripModal(){const t=T;if(!t)return;
@@ -1127,6 +1370,7 @@ document.addEventListener("click",async ev=>{
     case "setEmoji":{const v=b.dataset.v;const d=T.days.find(x=>x.id===b.dataset.day);d.emoji=v;patchTrip({["dayEmoji."+d.id]:v});flushPatches();closeModalEl(b.closest(".modal"));render();break}
     case "decor":document.querySelectorAll(".modal").forEach(x=>x.remove());decorModal();break;
     case "setTheme":{T.theme=b.dataset.v;patchTrip({theme:b.dataset.v});flushPatches();applyTheme();refreshDecor(b);break}
+    case "setLang":prefs.lang=b.dataset.v;savePrefs();location.reload();break;
     case "setPref":{const k=b.dataset.k,v=b.dataset.v;prefs[k]=v;savePrefs();refreshDecor(b);break}
     case "setCatColor":{const k=b.dataset.k,v=b.dataset.v;prefs.cats=Object.assign({},prefs.cats);if(v)prefs.cats[k]=v;else delete prefs.cats[k];savePrefs();refreshDecor(b);break}
     case "toggleWith":{const e=curEv();let ids=e.with||t.people.map(p=>p.id);ids=ids.includes(b.dataset.id)?ids.filter(i=>i!==b.dataset.id):[...ids,b.dataset.id];e.with=ids;patchEv(e.id,{with:ids});$("#withRow").innerHTML=withChips(t,e);break}
@@ -1141,6 +1385,7 @@ document.addEventListener("click",async ev=>{
       if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e);break}
     case "rmPhoto":{const e=curEv();const [p]=L.photos[e.id].splice(+b.dataset.i,1);putLocal();$("#photoGrid").innerHTML=photosHTML(e);if(p)setTimeout(()=>dropPhoto(p.id),400);break}
     case "pickCover":{const [f]=await pickFiles(false);if(!f)break;try{const old=L.cover;L.cover=await savePhoto(f,2400,true);putLocal();render();setTimeout(()=>dropPhoto(old),400);toast("표지 사진을 저장했어요")}catch(err){toast("사진을 저장하지 못했어요")}break}
+    case "renamePerson":renamePersonModal(b.dataset.id);break;
     case "rmPerson":{if(!isOwner()){toast("사람 빼기는 주인만 할 수 있어요");break}if(!confirmTap(b,"빼기?"))break;const p=t.people.find(x=>x.id===b.dataset.id);if(p)w(FB.updateDoc(ref.trip(),{people:FB.arrayRemove(p)}));if(p&&p.id===L.me){L.me="";putLocal()}break}
     case "ck":{const c=t.checklist.find(x=>x.id===b.dataset.id);c.done=b.checked;b.closest(".ck").classList.toggle("on",c.done);w(FB.updateDoc(ref.d("checklist",c.id),{done:c.done}));break}
     case "rmCk":ev.preventDefault();w(FB.deleteDoc(ref.d("checklist",b.dataset.id)));break;
@@ -1154,12 +1399,13 @@ document.addEventListener("click",async ev=>{
     case "addRest":restModal(null);break;
     case "pasteRest":pasteModal();break;
     case "pasteTrip":document.querySelectorAll(".modal").forEach(x=>x.remove());pasteModal();break;
-    case "copyFmt":{const ok=await navigator.clipboard?.writeText(FORMAT_HINT).then(()=>true,()=>false);toast(ok?"복사했어요. Claude에게 원하는 일정과 함께 보내세요":"복사하지 못했어요");break}
+    case "copyFmt":{const ok=await navigator.clipboard?.writeText(LANG==="en"?FORMAT_HINT_EN:FORMAT_HINT).then(()=>true,()=>false);toast(ok?"복사했어요. Claude에게 원하는 일정과 함께 보내세요":"복사하지 못했어요");break}
     case "editRest":restModal(b.dataset.id);break;
     case "delRest":{if(!confirmTap(b))break;const e=curEv();e.restaurants=(e.restaurants||[]).filter(r=>r.id!==b.dataset.id);saveRests(e);closeModalEl(b.closest(".modal"));break}
     case "addMenu":$("#menuEdit").insertAdjacentHTML("beforeend",menuLine({name:"",price:""}));break;
     case "rmMenu":b.closest(".menu-line").remove();break;
     case "editJournal":journalModal(b.dataset.id);break;
+    case "editLetter":letterModal(b.dataset.to||"all");break;
     case "expMine":{const m=b.closest(".modal");b.disabled=true;await exportMine(m.querySelector("#mineOut"),m.querySelector("#incPriv").checked,m.querySelector("#incOrig").checked,m.querySelector("#mineDay").value).catch(e=>{console.error(e);toast("파일을 만들지 못했어요")});b.disabled=false;break}
     case "clearOrig":{if(!confirmTap(b,"보내기를 마쳤다면 한 번 더 누르세요"))break;const all=await dbAll("orig").catch(()=>[]);let n=0;for(const o of all)if(o.tid===curId){await dbDel("orig",o.id);n++}b.textContent=`원본 ${n}장을 정리했어요 (갤러리 원본은 그대로예요)`;b.disabled=true;break}
     case "impPhotos":importPhotos(b.closest(".modal").querySelector("#impOut"));break;
@@ -1193,7 +1439,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=
 
 /* ================= example ================= */
 function loadExample(){
-  createTrip({name:"예시 · 샌안토니오 주말",destination:"San Antonio, TX",start:"2026-11-07",end:"2026-11-08",people:["나","친구"],meIndex:0,budget:400,example:true,
+  createTrip(deepTx({name:"예시 · 샌안토니오 주말",destination:"San Antonio, TX",start:"2026-11-07",end:"2026-11-08",people:["나","친구"],meIndex:0,budget:400,example:true,
     checklist:[{cat:"doc",text:"신분증 확인",done:true},{cat:"book",text:"숙소 예약 확인",done:true},{cat:"book",text:"리버워크 보트 티켓"},{cat:"pack",text:"편한 신발"},{cat:"etc",text:"출발 전 단체 사진 찍기"}],
     days:[{date:"2026-11-07",title:"다운타운 걷기",events:[
       {start:"10:00",end:"11:30",title:"알라모 둘러보기",cat:"sight",place:"The Alamo",address:"300 Alamo Plaza, San Antonio, TX",memo:"입장 무료, 교회 내부는 시간 지정 티켓",status:"done"},
@@ -1202,7 +1448,7 @@ function loadExample(){
      {date:"2026-11-08",title:"펄 디스트릭트와 미션",events:[
       {start:"09:30",end:"11:00",title:"펄 파머스 마켓",cat:"shop",place:"Pearl District",address:"303 Pearl Pkwy, San Antonio, TX"},
       {start:"13:00",end:"15:00",title:"미션 산호세",cat:"sight",place:"Mission San José",address:"6701 San Jose Dr, San Antonio, TX"}]}],
-    expenses:[{title:"주유 (예시)",amount:42.5,cat:"move",date:"2026-11-07",paidByIndex:0},{title:"호텔 1박 (예시)",amount:139,cat:"stay",date:"2026-11-07",paidByIndex:1}]});
+    expenses:[{title:"주유 (예시)",amount:42.5,cat:"move",date:"2026-11-07",paidByIndex:0},{title:"호텔 1박 (예시)",amount:139,cat:"stay",date:"2026-11-07",paidByIndex:1}]}));
 }
 
 /* ================= boot ================= */

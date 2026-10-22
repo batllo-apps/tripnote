@@ -341,3 +341,22 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 @media (max-width:360px){.drawer .grid2{grid-template-columns:1fr}}
 .pbprev{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
 .pbprev img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.18)}
+.pchip .pname{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.pchip .pname:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+.lrows{display:flex;flex-direction:column;gap:6px}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0;border-top:1px dashed var(--line)}
+.lrow:first-child{border-top:0}
+/* 첫 화면 */
+.welcome{display:flex;flex-direction:column;gap:18px;padding:8px 0 24px}
+.w-hero{display:flex;align-items:center;gap:14px}
+.w-hero img{border-radius:18px;box-shadow:0 6px 18px rgba(0,0,0,.12)}
+.w-hero h1{margin:0;font-size:30px;line-height:1.1;letter-spacing:-.02em}
+.w-hero p{margin:4px 0 0;color:var(--muted)}
+.w-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.w-steps li{display:flex;gap:12px;align-items:flex-start;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.w-steps .w-ico{font-size:26px;line-height:1;flex:none;width:40px;height:40px;display:flex;align-items:center;justify-content:center;background:var(--accent-soft);border-radius:12px}
+.w-steps b{font-size:16px}.w-steps p{margin:4px 0 0;color:var(--muted);font-size:14px;line-height:1.5}
+.w-cta{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.w-cta .btn{padding:14px 10px;font-size:15px}
+.w-foot{text-align:center;color:var(--muted);font-size:13px;margin:0}
+.w-foot a{color:var(--muted)}

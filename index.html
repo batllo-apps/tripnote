@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>여행 일정 노트</title>
-<meta name="description" content="일정, 기록, 사진, 예산을 폰 안에 저장하는 여행 플래너">
+<title>같이가J</title>
+<meta name="description" content="가족·친구와 함께 짜고, 함께 기록하는 여행 플래너">
 <meta name="theme-color" content="#0E6B78" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0D171D" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
@@ -15,7 +15,7 @@
 <body>
 <div class="wrap">
   <div class="topbar">
-    <div class="brand"><i id="syncDot" data-s="busy" title="동기화 상태"></i>여행 일정 노트</div>
+    <div class="brand"><i id="syncDot" data-s="busy" title="동기화 상태"></i>같이가J</div>
     <div class="row">
       <select id="tripSel" class="btn" aria-label="여행 선택"></select>
       <button class="btn" id="newTripBtn">+ 새 여행</button>
@@ -28,6 +28,7 @@
 <div id="layer"></div>
 <script src="firebase-config.js"></script>
 <script src="firebase-bundle.js"></script>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

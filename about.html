@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>같이가J (GoTripJ) · 여행 일정 공유 · 가족 여행 플래너 · 여행 사진첩</title>
+<meta name="description" content="가족·친구와 함께 여행 일정과 예산을 짜고, 기록과 사진으로 사진첩과 롤링페이퍼까지 만드는 여행 플래너. 회원가입·광고 없음.">
+<meta property="og:title" content="같이가J · 함께 짜고, 함께 기록하는 여행">
+<meta name="keywords" content="여행 일정 공유, 가족 여행 플래너, 여행 플래너, 여행 사진첩, 크루즈 일정, 롤링페이퍼, group trip planner, family trip planner, shared itinerary, trip photo book">
+<meta property="og:description" content="일정, 예산, 체크리스트를 함께 쓰고 여행이 끝나면 사진첩과 롤링페이퍼까지. 회원가입·광고 없음.">
+<meta property="og:image" content="store/feature-ko.png">
+<link rel="icon" href="icons/icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+:root{--bg:#F5F8FA;--card:#FFFFFF;--ink:#16242C;--muted:#5B6A72;--accent:#2F7FD0;--accent2:#FF7A59;--soft:#E3F0FB;--line:#DFE7EC}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F171C;--card:#162229;--ink:#E7EEF1;--muted:#9AABB3;--accent:#6FB0F0;--accent2:#FF9A7D;--soft:#17303F;--line:#24353D}}
+:root[data-theme="dark"]{--bg:#0F171C;--card:#162229;--ink:#E7EEF1;--muted:#9AABB3;--accent:#6FB0F0;--accent2:#FF9A7D;--soft:#17303F;--line:#24353D}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+a{color:var(--accent)}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px}
+header.hero{background:url(store/hero-bg.jpg) center/cover no-repeat,linear-gradient(180deg,#8AD8F8 0%,#4A98E4 100%);color:#fff;padding:56px 0 64px;overflow:hidden}
+.hero .wrap{display:grid;grid-template-columns:1.1fr .9fr;gap:32px;align-items:center}
+.hero img.icon{width:132px;height:auto;transform:rotate(-7deg);margin-left:-8px}
+.hero h1,.hero p.tag{text-shadow:0 3px 14px rgba(20,60,120,.35)}
+.hero h1{font-size:clamp(36px,6vw,56px);line-height:1.05;margin:16px 0 8px;letter-spacing:-.02em}
+.hero p.tag{font-size:clamp(18px,2.4vw,22px);margin:0 0 20px;opacity:.95}
+.hero .points{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px;padding:0;list-style:none}
+.hero .points li{background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);border-radius:999px;padding:4px 12px;font-size:14px}
+.cta{display:flex;flex-wrap:wrap;gap:10px}
+.btn{display:inline-flex;align-items:center;justify-content:center;padding:13px 20px;border-radius:14px;font-weight:700;text-decoration:none;font-size:16px}
+.btn.primary{background:#fff;color:#1F5FAD}
+.btn.ghost{border:1.5px solid rgba(255,255,255,.8);color:#fff}
+.phone{justify-self:center;width:min(300px,80vw);border-radius:34px;border:8px solid #12202A;box-shadow:0 24px 60px rgba(0,0,0,.3);display:block}
+section{padding:56px 0}
+h2{font-size:clamp(24px,3.6vw,32px);line-height:1.25;margin:0 0 8px;letter-spacing:-.01em}
+.sub{color:var(--muted);margin:0 0 28px;max-width:640px}
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.feat article{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.feat img{width:100%;border-radius:14px;border:1px solid var(--line);aspect-ratio:9/13;object-fit:cover;object-position:top}
+.feat h3{margin:0;font-size:19px}.feat p{margin:0;color:var(--muted);font-size:15px}
+.special{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+.special div{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px}
+.special b{display:block;font-size:17px;margin-bottom:4px}.special span{color:var(--muted);font-size:15px}
+.install{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.install div{background:var(--soft);border-radius:18px;padding:20px}
+.install h3{margin:0 0 8px}.install ol{margin:0;padding-left:20px}
+.promise{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:24px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;text-align:center}
+.promise b{display:block;font-size:22px;margin-bottom:2px}.promise span{color:var(--muted);font-size:14px}
+footer{padding:32px 0 48px;color:var(--muted);font-size:14px;text-align:center}
+.en{color:var(--muted);font-size:15px;border-top:1px solid var(--line);padding-top:24px;margin-top:8px}
+@media (max-width:820px){header.hero{background-size:auto 100%,cover}.hero .wrap{grid-template-columns:1fr}.phone{margin-top:8px}.feat{grid-template-columns:1fr}.special,.install{grid-template-columns:1fr}.promise{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <img class="icon" src="store/mascot.png" alt="같이가J 대표 캐릭터, J 캐리어">
+      <h1>같이가J</h1>
+      <p class="tag">함께 짜고, 함께 기록하는 여행</p>
+      <ul class="points"><li>회원가입 없음</li><li>광고 없음</li><li>무료</li><li>인터넷 없어도 OK</li></ul>
+      <div class="cta"><a class="btn primary" href="./">앱 열기</a><a class="btn ghost" href="#install">설치 방법</a></div>
+    </div>
+    <img class="phone" src="store/2-schedule.png" alt="날짜별 일정 화면">
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>여행 전부터 다녀온 뒤까지, 한 앱에서</h2>
+    <p class="sub">계획 세우기 좋아하는 J들을 위해 만들었어요. 일정을 짜는 사람도, 따라가는 사람도 같은 화면을 봐요.</p>
+    <div class="feat">
+      <article><img src="store/2-schedule.png" alt="일정 화면" loading="lazy"><h3>🗓️ 일정은 쉽게</h3><p>날짜별 시간표에 직접 넣거나, AI에게 짜 달라고 한 일정을 붙여넣으면 한 번에 들어가요. 이동 일정은 버튼 하나로 내비가 켜져요.</p></article>
+      <article><img src="store/3-record.png" alt="기록 화면" loading="lazy"><h3>👨‍👩‍👧 같이 쓰는 여행</h3><p>초대 링크로 들어오면 일정, 예산, 체크리스트를 함께 고쳐요. 기록은 '나만 보기'와 '함께 보기' 중에 골라요.</p></article>
+      <article><img src="store/5-photobook.png" alt="사진첩 만들기 화면" loading="lazy"><h3>📖 추억은 사진첩으로</h3><p>일정마다 남긴 사진과 한 줄이 여행이 끝나면 사진첩 PDF가 돼요. 인쇄소나 Mixbook, Shutterfly에 그대로 맡길 수 있어요.</p></article>
+    </div>
+  </section>
+
+  <section>
+    <h2>다른 여행 앱에는 없는 것들</h2>
+    <p class="sub">직접 가족 여행을 준비하면서 "이런 게 있었으면" 했던 것들이에요.</p>
+    <div class="special">
+      <div><b>⏱ 같은 시간, 다른 일정</b><span>아이는 키즈 클럽, 어른은 수영장. 사람마다 다른 일정을 따로 두고, 내 일정만 골라 볼 수 있어요.</span></div>
+      <div><b>📥 보류함</b><span>못 간 곳은 보류함으로. 시간이 남으면 골라서 "지금 바로" 일정에 다시 넣어요.</span></div>
+      <div><b>💌 롤링페이퍼</b><span>여행이 끝나면 한 사람 한 사람에게 쪽지를 남겨요. 사진첩 마지막에 "To 이름" 페이지로 모이고, 스티커도 붙어요.</span></div>
+      <div><b>💕 Her · His 커플 사진첩</b><span>같은 장소에서 각자 찍은 사진과 각자 쓴 한 줄을 나란히. 두 사람의 여행을 두 시선으로 남겨요.</span></div>
+      <div><b>🌊 오프라인에서도</b><span>크루즈 바다 위처럼 인터넷이 없어도 일정을 보고 고쳐요. 연결되면 알아서 맞춰져요.</span></div>
+      <div><b>📷 사진은 내 폰에만</b><span>사진은 서버에 올리지 않아요. 여행이 끝나면 원하는 사람끼리만 파일로 모아요.</span></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>설치 방법</h2>
+    <p class="sub">앱스토어 없이 바로 설치해요. 설치하면 홈 화면에 J 캐리어 아이콘이 생겨요.</p>
+    <div class="install">
+      <div><h3>안드로이드</h3><ol><li>크롬에서 <a href="./">앱 주소</a>를 열어요.</li><li>오른쪽 위 ⋮ 메뉴 → <b>앱 설치</b>를 눌러요.</li><li>초대 링크를 받았다면 링크를 크롬으로 열어 참여해요.</li></ol></div>
+      <div><h3>아이폰</h3><ol><li>사파리에서 <a href="./">앱 주소</a>를 열어요.</li><li>아래 공유 버튼 → <b>홈 화면에 추가</b>를 눌러요.</li><li>초대 링크를 받았다면 링크를 사파리로 열어 참여해요.</li></ol></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="promise">
+      <div><b>0원</b><span>모든 기능 무료</span></div>
+      <div><b>0개</b><span>광고 · 추적 · 회원가입</span></div>
+      <div><b>내 폰</b><span>사진과 나만 보기 기록이 머무는 곳</span></div>
+    </div>
+    <p class="en"><b>GoTripJ</b> — plan trips together and keep the memories. Shared schedules, budgets and checklists; per-person plans; offline support; and when you're home, a printable photo book with a family rolling paper. No sign-up, no ads. The app switches to English automatically when your phone is set to English.</p>
+  </section>
+</main>
+<footer>
+  같이가J (GoTripJ) · <a href="privacy.html">개인정보 처리방침</a> · <a href="terms.html">이용약관</a>
+</footer>
+</body>
+</html>
