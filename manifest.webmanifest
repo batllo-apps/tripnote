@@ -1,7 +1,7 @@
 {
-  "name": "여행 일정 노트",
-  "short_name": "여행노트",
-  "description": "일정, 기록, 사진, 예산을 폰 안에 저장하는 여행 플래너",
+  "name": "같이가J - 함께 짜고 함께 기록하는 여행",
+  "short_name": "같이가J",
+  "description": "가족·친구와 함께 여행 일정과 예산을 짜고, 기록과 사진으로 사진첩과 롤링페이퍼까지 만드는 여행 플래너. 회원가입·광고 없음.",
   "lang": "ko",
   "start_url": "./",
   "scope": "./",
@@ -9,6 +9,15 @@
   "orientation": "portrait",
   "background_color": "#EEF2F3",
   "theme_color": "#0E6B78",
+  "id": "./",
+  "categories": ["travel","lifestyle","productivity"],
+  "screenshots": [
+    {"src": "store/1-welcome.png", "sizes": "1080x2340", "type": "image/png", "form_factor": "narrow", "label": "같이가J 첫 화면"},
+    {"src": "store/2-schedule.png", "sizes": "1080x2340", "type": "image/png", "form_factor": "narrow", "label": "날짜별 일정"},
+    {"src": "store/3-record.png", "sizes": "1080x2340", "type": "image/png", "form_factor": "narrow", "label": "일정마다 기록과 사진"},
+    {"src": "store/4-journal.png", "sizes": "1080x2340", "type": "image/png", "form_factor": "narrow", "label": "여행기"},
+    {"src": "store/5-photobook.png", "sizes": "1080x2340", "type": "image/png", "form_factor": "narrow", "label": "사진첩 만들기"}
+  ],
   "icons": [
     {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
     {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},

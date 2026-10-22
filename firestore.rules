@@ -1,0 +1,50 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function ownersOf(d) { return d.get('owners', [d.createdBy]); }
+    function viewersOf(d) { return d.get('viewers', []); }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // 여행 하나 = trips/{초대코드}. 코드를 아는 사람만 읽고 쓸 수 있어요.
+    match /trips/{tripId} {
+      allow get: if signedIn();
+      allow list: if false;  // 여행 목록 훑어보기 금지
+
+      allow create: if signedIn()
+                    && tripId.size() >= 12
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.auth.uid in ownersOf(request.resource.data);
+
+      allow update: if signedIn()
+                    && request.resource.data.createdBy == resource.data.createdBy
+                    && (
+                      // 주인: 무엇이든 바꿀 수 있지만 주인은 최소 한 명 남아야 해요
+                      (request.auth.uid in ownersOf(resource.data)
+                        && ownersOf(request.resource.data).size() > 0)
+                      // 참가자: 역할(주인/보기 전용)은 못 바꿔요
+                      || (!(request.auth.uid in viewersOf(resource.data))
+                        && !changed().hasAny(['owners', 'viewers']))
+                      // 보기 전용: '나는 누구' 선택과 내 이름 추가만 할 수 있어요
+                      || (request.auth.uid in viewersOf(resource.data)
+                        && changed().hasOnly(['members', 'people', 'updatedAt']))
+                    );
+
+      allow delete: if signedIn() && request.auth.uid in ownersOf(resource.data);
+
+      // 일정, 지출, 체크리스트, 함께 보기 기록
+      match /{sub}/{docId} {
+        allow read: if signedIn()
+                    && sub in ['events', 'expenses', 'checklist', 'notes']
+                    && exists(/databases/$(database)/documents/trips/$(tripId));
+        // 기록(notes)은 보기 전용 참가자도 쓸 수 있고, 나머지는 보기 전용이면 못 고쳐요
+        allow write: if signedIn()
+                     && sub in ['events', 'expenses', 'checklist', 'notes']
+                     && existsAfter(/databases/$(database)/documents/trips/$(tripId))
+                     && (sub == 'notes'
+                         || !(request.auth.uid in viewersOf(getAfter(/databases/$(database)/documents/trips/$(tripId)).data)));
+      }
+    }
+  }
+}

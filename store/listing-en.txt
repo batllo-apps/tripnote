@@ -1,0 +1,44 @@
+[App name] (max 30 characters)
+GoTripJ: Group Trip Planner
+
+[Short description] (max 80 characters)
+Plan trips together, then turn your trip into a photo book and rolling paper.
+
+[Full description]
+GoTripJ is a group trip planner for families, friends and couples, made for the planners in every group. Everyone sees the same itinerary, and everyone can add to the memories.
+
+■ Plan your itinerary
+· Day-by-day schedule with done and hold
+· Paste an itinerary from an AI assistant and it fills in at once
+· One tap opens Google Maps, Waze or Apple Maps for each drive
+· Places you skipped wait in the Hold box until you have time
+
+■ A shared itinerary for the whole group
+· Join with one invite link — no sign-up
+· Edit the schedule, budget and packing checklist together
+· Different plans at the same time: kids' club for the kids, pool for the adults
+· Owner, participant and view-only roles
+· Works offline, even on a cruise ship, and syncs when you're back online
+
+■ Turn the trip into a photo book
+· Add photos, a one-line mood and a diary entry to each stop (private or shared)
+· Get an 8×8 trip photo book PDF when you're home
+· Her & His couple photo book: the same places through two pairs of eyes
+· Rolling paper: everyone leaves a note for each person, decorated with stickers
+
+■ Great for
+· Family trips, couple trips and group trips that need a shared itinerary
+· Keeping a travel budget and packing checklist together
+· Cruise itineraries and road trips
+· Anyone who wants a trip photo book when they get home
+
+■ Private by design
+· No sign-up, no ads, no tracking
+· Photos and private notes stay on your phone
+
+[Category] Travel & Local
+[Contact email] (app email)
+[Privacy policy URL] https://batllo-apps.github.io/tripnote/privacy.html#en
+
+[Search phrases this listing should cover]
+group trip planner · family trip planner · shared itinerary · trip itinerary · travel planner · trip photo book · cruise itinerary · travel budget · packing checklist · couple trip
