@@ -21,7 +21,18 @@ const SWATCH=["#7A4FB5","#2B74B8","#C2521F","#4F6B7C","#B23A73","#7D7F57","#2F8F
 const EMOJIS=["✈️","🚗","🚢","🚆","🏨","🏖️","⛱️","🌊","⛰️","🌲","🏙️","🌃","🌅","🏛️","🎢","🎭","🍽️","☕","🛍️","🎉","🎁","❄️","☀️","❤️"];
 const NAVN={google:"Google 지도",waze:"Waze",apple:"Apple 지도"};
 const FONTS={normal:1,large:1.12,xl:1.25};
-let prefs={appearance:"auto",font:"normal",cats:{},nav:"google"};
+let prefs={appearance:"auto",font:"normal",cats:{},nav:"google",book:"on"};
+// 예약 도우미: 제휴 승인이 나면 여기에 파트너 번호만 넣으면 돼요 (화면은 그대로)
+const AFF={booking:"",gyg:"",amazon:""};
+const hasAff=()=>!!(AFF.booking||AFF.gyg||AFF.amazon);
+const bookOn=()=>prefs.book!=="off";
+const nextDate=d=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+1);return x.toISOString().slice(0,10)};
+function bkURL(kind,o={}){const q=encodeURIComponent;
+  if(kind==="stay"){let u=`https://www.booking.com/searchresults.html?ss=${q(o.q||"")}`;if(o.in)u+=`&checkin=${o.in}&checkout=${o.out||nextDate(o.in)}`;if(AFF.booking)u+=`&aid=${q(AFF.booking)}`;return u}
+  if(kind==="tour"){let u=`https://www.getyourguide.com/s/?q=${q(o.q||"")}`;if(AFF.gyg)u+=`&partner_id=${q(AFF.gyg)}`;return u}
+  if(kind==="shop"){let u=`https://www.amazon.com/s?k=${q(o.q||"")}`;if(AFF.amazon)u+=`&tag=${q(AFF.amazon)}`;return u}
+  if(kind==="car")return "https://www.discovercars.com/";
+  if(kind==="esim")return "https://www.airalo.com/";return "#"}
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem("tripnote:prefs")||"{}"))}catch(e){}
 /* ---------- 언어 (한국어 / English) ---------- */
 const LANG=(()=>{const p=prefs.lang||"auto";if(p==="ko"||p==="en")return p;return /^ko/i.test(navigator.language||"")?"ko":"en"})();
@@ -424,16 +435,26 @@ function evHTML(e,showDay){
         <button class="st-btn done" aria-pressed="${e.status==="done"}" data-act="status" data-s="done" data-id="${e.id}">✓ 완료</button>
         <button class="st-btn hold" aria-pressed="false" data-act="status" data-s="hold" data-id="${e.id}">보류</button>`}
         <button class="st-btn" data-act="open" data-id="${e.id}">상세 · 기록</button>
+        ${evBookHTML(e,day)}
         ${routeOf(e).dest&&e.status!=="done"?`<a class="st-btn go" href="${navURL(prefs.nav||"google",routeOf(e))}" target="_blank" rel="noopener">🚗 가기</a>`:""}
       </div>
       ${e.status==="done"?goNextHTML(e):""}
     </div></article>`;
 }
 
+function evBookHTML(e,day){if(!bookOn()||e.status==="done")return "";const t=T;
+  if(e.cat==="stay"&&day&&!/체크\s*아웃|check.?out/i.test(e.title||""))return `<a class="st-btn bk" href="${bkURL("stay",{q:e.place||e.title||t.destination,in:day.date})}" target="_blank" rel="noopener">🏨 <span>숙소 예약</span></a>`;
+  if(e.cat==="sight")return `<a class="st-btn bk" href="${bkURL("tour",{q:[e.place||e.title,t.destination].filter(Boolean).join(" ")})}" target="_blank" rel="noopener">🎟 <span>투어·티켓</span></a>`;
+  return ""}
+function bookCardHTML(t){if(!bookOn())return "";const dest=t.destination||t.name||"";
+  const L2=[["🏨","숙소 찾기",bkURL("stay",{q:dest,in:t.start,out:t.end&&t.end>t.start?t.end:null})],["🎟","투어 찾기",bkURL("tour",{q:dest})],["🚙","렌터카",bkURL("car")],["📶","eSIM",bkURL("esim")]];
+  return `<div class="card bookhelp"><h3>예약 도우미 <span class="hint">${esc(dest)} · 여행 날짜로 바로 검색해요</span></h3>
+    <div class="bklinks">${L2.map(([i,n,u])=>`<a href="${u}" target="_blank" rel="noopener"><span>${i}</span>${n}</a>`).join("")}</div>
+    <p class="hint">${hasAff()?"일부는 제휴 링크예요. 이 링크로 예약하면 같이가J가 수수료를 받을 수 있어요. 가격은 똑같아요.":"검색 결과로 바로 연결돼요. 같이가J는 이 링크로 돈을 받지 않아요."} 꾸미기에서 숨길 수 있어요.</p></div>`}
 function prepHTML(t){
   const ck=t.checklist,n=ck.filter(c=>c.done).length;
   const groups=Object.entries(PREP).map(([k,v])=>{const items=ck.filter(c=>c.cat===k);if(!items.length)return "";
-    return `<div class="ck-group"><span class="eyebrow" style="margin-top:6px">${v}</span>${items.map(c=>`<label class="ck ${c.done?"on":""}"><input type="checkbox" data-act="ck" data-id="${c.id}" ${c.done?"checked":""}><span class="txt">${esc(c.text)}</span><button type="button" class="x" data-act="rmCk" data-id="${c.id}" aria-label="항목 삭제">✕</button></label>`).join("")}</div>`}).join("");
+    return `<div class="ck-group"><span class="eyebrow" style="margin-top:6px">${v}</span>${items.map(c=>`<label class="ck ${c.done?"on":""}"><input type="checkbox" data-act="ck" data-id="${c.id}" ${c.done?"checked":""}><span class="txt">${esc(c.text)}</span>${bookOn()&&c.cat==="pack"&&!c.done?`<a class="buy" href="${bkURL("shop",{q:c.text})}" target="_blank" rel="noopener" aria-label="사러 가기">🛒</a>`:""}<button type="button" class="x" data-act="rmCk" data-id="${c.id}" aria-label="항목 삭제">✕</button></label>`).join("")}</div>`}).join("");
   return `<div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
     <div class="card invite">
       <h3>함께 갈 사람 초대 <span class="hint">코드를 아는 사람만 들어올 수 있어요</span></h3>
@@ -453,6 +474,7 @@ function prepHTML(t){
       <h3>출발 전 단체 사진 <span class="hint">여행기 표지가 돼요 · 이 폰에 저장</span></h3>
       <button type="button" class="cover-pick" data-act="pickCover">${L.cover?phImg(L.cover,"단체 사진"):""}<span>${L.cover?"사진 바꾸기":"+ 갤러리에서 고르기"}</span></button>
     </div>
+    ${bookCardHTML(t)}
     <div class="card">
       <h3>준비 체크리스트 <span class="hint mono">${n}/${ck.length} 완료 · 함께 보기</span></h3>
       <div class="bar" style="width:100%"><span style="width:${ck.length?n/ck.length*100:0}%;background:var(--accent)"></span></div>
@@ -529,6 +551,10 @@ function journalHTML(t){
 const PB_FONT='system-ui,-apple-system,"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif';
 async function pbImage(id,useOrig){let r=null;if(useOrig)r=await dbGet("orig",id).catch(()=>null);if(!r)r=await dbGet("photos",id).catch(()=>null);if(!r||!r.blob)return null;
   try{return await createImageBitmap(r.blob,{imageOrientation:"from-image"})}catch(e){try{return await imgFromBlob(r.blob)}catch(e2){return null}}}
+const phCap=id=>{if(!L)return "";for(const l of Object.values(L.photos||{})){const p=l.find(q=>q.id===id);if(p)return p.cap||""}return ""};
+function pbCap(ctx,txt,x,y,w,h,u,font){if(!txt)return;font(Math.min(3,w/(18*u)*3),600);const lines=pbLines(ctx,txt,w-4*u,2);const lh=parseFloat(ctx.font.match(/(\d+)px/)[1])*1.3;
+  const bh=lines.length*lh+3*u;const g=ctx.createLinearGradient(0,y+h-bh-4*u,0,y+h);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.62)");
+  ctx.fillStyle=g;ctx.fillRect(x,y+h-bh-4*u,w,bh+4*u);ctx.fillStyle="#fff";lines.forEach((l,k)=>ctx.fillText(l,x+2*u,y+h-bh+1.5*u+k*lh))}
 function pbFill(ctx,img,x,y,w,h){const iw=img.width,ih=img.height;const s=Math.max(w/iw,h/ih);const sw=w/s,sh=h/s;ctx.drawImage(img,(iw-sw)/2,(ih-sh)/2,sw,sh,x,y,w,h)}
 function pbLines(ctx,text,maxW,maxLines){const out=[];
   for(const para of String(text||"").split("\n")){let line="";
@@ -660,7 +686,7 @@ async function pbDraw(t,pg,S,o,cover){
     x.strokeStyle=acc;x.globalAlpha=.5;x.setLineDash([.6*u,.9*u]);x.lineWidth=.3*u;x.beginPath();x.arc(cx,cy,R0+1.6*u,0,Math.PI*2);x.stroke();x.setLineDash([]);x.globalAlpha=1;
     x.textAlign="center";x.fillStyle=acc;x.font=`italic 400 ${Math.round(3.4*u)}px ${SERIF}`;x.fillText("To",cx,cy-9*u);
     x.fillStyle=ink;let fz=6.2;F(fz,800);while(fz>3.4&&x.measureText(pg.to).width>R0*1.75){fz-=.2;F(fz,800)}x.fillText(pg.to,cx,cy-fz*.6*u);
-    x.fillStyle=mut;F(2.4,500);x.fillText(`${nNotes(pg.n,"개의 쪽지","note","notes")}${pg.cont?CONT():""}`,cx,cy+6.4*u);
+    if(pg.cont){x.fillStyle=mut;F(2.4,500);x.fillText(CONT().trim(),cx,cy+6.4*u)}
     if(!o.stk)[[.16,.2,"♥"],[.84,.18,"★"],[.12,.82,"✿"],[.88,.84,"♥"],[.5,.07,"✦"],[.5,.94,"✦"]].forEach(([a,b2,ch])=>{x.fillStyle=acc;x.globalAlpha=.35;F(3.4,400);x.fillText(ch,a*S,b2*S);x.globalAlpha=1});
     const occ=[{x:cx-R0-3*u,y:cy-R0-3*u,w:2*R0+6*u,h:2*R0+6*u}];
     const n=pg.list.length,sc=n<=2?1.4:n<=4?1.2:1,nw=(n<=2?60:n<=4?34:30)*u,su=u*sc;
@@ -675,7 +701,7 @@ async function pbDraw(t,pg,S,o,cover){
     const g=x.createLinearGradient(0,0,0,S);g.addColorStop(0,"#FFF7FB");g.addColorStop(1,soft);x.fillStyle=g;x.fillRect(0,0,S,S);
     x.fillStyle=acc;x.globalAlpha=.08;for(let i=0;i<14;i++)for(let j=0;j<14;j++){x.beginPath();x.arc((i+.5)*S/14,(j+.5)*S/14,.35*u,0,7);x.fill()}x.globalAlpha=1;
     let y=m*1.3;x.textAlign="center";x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,S/2,y);
-    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 메시지","message","messages"),S/2,y+9*u);x.textAlign="left";
+    x.textAlign="left";
     const {placed}=bubbleLayout(x,S,pg.list,pg.sc);const occ=[{x:S*.25,y:y-2*u,w:S*.5,h:13*u}];
     placed.forEach(p=>{const su=u*(p.sc||1);const col=RING_INK[hashStr(p.it.from)%RING_INK.length];
       const ax=p.right?S-m-p.av/2:m+p.av/2,ay=p.y+p.h-p.av/2;x.fillStyle=col;x.beginPath();x.arc(ax,ay,p.av/2,0,7);x.fill();
@@ -689,7 +715,7 @@ async function pbDraw(t,pg,S,o,cover){
   }else if(pg.type==="roll"&&o.roll==="stamp"){
     x.fillStyle="#F2EADC";x.fillRect(0,0,S,S);x.fillStyle="#E7DCC8";for(let i=0;i<900;i++){const r=prng(i*7+1);x.globalAlpha=.25;x.fillRect(r()*S,r()*S,.25*u,.25*u)}x.globalAlpha=1;
     let y=m*1.3;x.fillStyle="#5A4632";x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
-    x.fillStyle="#8B7560";F(2.8,500);x.fillText(nNotes(pg.n,"통의 엽서","postcard","postcards"),m,y+9*u);
+
     const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);const occ=[{x:m,y:y,w:S*.5,h:13*u}];
     placed.forEach(p=>{const pc=document.createElement("canvas");pc.width=Math.ceil(p.w);pc.height=Math.ceil(p.h);const q=pc.getContext("2d");
       q.fillStyle="#FFFDF8";q.fillRect(0,0,p.w,p.h);q.globalCompositeOperation="destination-out";const hr=.9*u,st=2.6*u;
@@ -703,7 +729,7 @@ async function pbDraw(t,pg,S,o,cover){
     if(o.stk)placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.to)+5,4);
   }else if(pg.type==="roll"&&(o.roll||"ring")!=="note"){
     x.fillStyle="#FBF7F0";x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
-    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 쪽지","note","notes"),m,y+9*u);
+
     const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);
     placed.forEach(p=>{x.save();x.translate(p.x+p.w/2,p.y+p.h/2);x.rotate((p.k%2?1:-1)*.008);x.translate(-p.w/2,-p.h/2);
       x.shadowColor="rgba(60,40,30,.16)";x.shadowBlur=1.6*u;x.shadowOffsetY=.5*u;x.fillStyle="#FFFFFF";rrect(x,0,0,p.w,p.h,1.6*u);x.fill();x.shadowColor="transparent";
@@ -713,7 +739,7 @@ async function pbDraw(t,pg,S,o,cover){
     if(o.stk)placeStickers(x,S,[{x:m,y:m,w:S*.5,h:16*u},...placed.map(p=>({x:p.x,y:p.y-2*u,w:p.w,h:p.h+2*u}))],stickerSet(t,o),hashStr(pg.to)+1,4);
   }else if(pg.type==="roll"){
     x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;x.font=`italic 400 ${Math.round(6.5*u)}px ${SERIF}`;x.fillText(`To ${pg.to}${pg.cont?CONT():""}`,m,y);
-    x.fillStyle=mut;F(2.8,500);x.fillText(nNotes(pg.n,"개의 쪽지","note","notes"),m,y+9*u);
+
     const {placed}=rollLayout(x,S,pg.list,pg.sc);const su=u*(pg.sc||1);
     placed.forEach(p=>{x.save();x.translate(p.x+p.w/2,p.y+p.h/2);x.rotate((p.k%2?1:-1)*.012);x.translate(-p.w/2,-p.h/2);
       x.shadowColor="rgba(0,0,0,.12)";x.shadowBlur=1.2*u;x.shadowOffsetY=.4*u;x.fillStyle=ROLL_COL[p.k%ROLL_COL.length];x.fillRect(0,0,p.w,p.h);x.shadowColor="transparent";
@@ -736,7 +762,7 @@ async function pbDraw(t,pg,S,o,cover){
       const txt=txtOf(n);F(2.9,400);const tl=txt?pbLines(x,txt,cw,pg.cont?0:4):[];const th2=tl.length?tl.length*4.3*u+1.5*u:0;
       const ph=bottom-th2-yy;const gh=Math.round(1.2*u);
       if(ids.length){const imgs=[];for(const id of ids)imgs.push(await pbImage(id,o.orig));const h=ids.length>1?(ph-gh)/2:ph;
-        imgs.forEach((im,k)=>{const by=yy+k*(h+gh);if(im){pbFill(x,im,cx,by,cw,h);im.close&&im.close()}else{x.fillStyle="#EEE4E8";x.fillRect(cx,by,cw,h)}})}
+        imgs.forEach((im,k)=>{const by=yy+k*(h+gh);if(im){pbFill(x,im,cx,by,cw,h);im.close&&im.close()}else{x.fillStyle="#EEE4E8";x.fillRect(cx,by,cw,h)}if(o.text)pbCap(x,phCap(ids[k]),cx,by,cw,h,u,F)})}
       else{x.fillStyle=soft;x.fillRect(cx,top+5.4*u,cw,bottom-top-5.4*u);x.fillStyle=ink;F(3.6,500);const q=pbLines(x,"“"+txt+"”",cw-6*u,8);
         const qh=q.length*5.4*u;pbText(x,q,cx+3*u,top+5.4*u+(bottom-top-5.4*u-qh)/2,5.4*u);return}
       if(tl.length){x.fillStyle=ink;F(2.9,400);pbText(x,tl,cx,bottom-th2+1.5*u,4.3*u)}};
@@ -745,9 +771,19 @@ async function pbDraw(t,pg,S,o,cover){
   }else if(pg.type==="photos"){
     const capH=o.text&&!pg.cont?S*.2:S*.13;const W=S-2*m,H=S-m-capH-m*.4;const gap=Math.round(1.2*u);
     const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
-    const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh);else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}};
+    const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh);else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}if(o.text)pbCap(x,phCap(pg.ph[i]),bx,by,bw,bh,u,F)};
     const n=imgs.length,X=m,Y=m;
-    if(n===1)box(0,X,Y,W,H);
+    if(n===1&&o.single!=="full"){const im=imgs[0],rnd=prng(hashStr(pg.ph[0]));
+      x.fillStyle=soft;x.fillRect(0,0,S,S);
+      const ar=im?Math.min(1.35,Math.max(.75,im.width/im.height)):1,pad=3*u,bot=o.text&&phCap(pg.ph[0])?13*u:9*u;
+      let pw=W*.74-2*pad,ph=pw/ar;const maxPh=H*.9-pad-bot;if(ph>maxPh){ph=maxPh;pw=ph*ar}
+      const fw=pw+2*pad,fh=ph+pad+bot,cx=S/2,cy=Y+H/2,rot=(rnd()-.5)*.09;
+      x.save();x.translate(cx,cy);x.rotate(rot);x.shadowColor="rgba(0,0,0,.22)";x.shadowBlur=3*u;x.shadowOffsetY=1*u;x.fillStyle="#fff";x.fillRect(-fw/2,-fh/2,fw,fh);x.shadowColor="transparent";
+      if(im)pbFill(x,im,-fw/2+pad,-fh/2+pad,pw,ph);else{x.fillStyle="#E6EBEE";x.fillRect(-fw/2+pad,-fh/2+pad,pw,ph)}
+      const cap=o.text?phCap(pg.ph[0]):"";if(cap){x.fillStyle=ink;x.font=`italic 400 ${Math.round(3.6*u)}px ${SERIF}`;x.textAlign="center";x.fillText(pbLines(x,cap,pw,1)[0],0,fh/2-bot+3.4*u);x.textAlign="left"}
+      x.fillStyle="rgba(255,236,170,.78)";x.save();x.translate(0,-fh/2);x.rotate(-.06+rnd()*.12);x.fillRect(-9*u,-2.4*u,18*u,4.8*u);x.restore();x.restore();
+      if(o.stk){const occ=[{x:cx-fw/2-3*u,y:cy-fh/2-4*u,w:fw+6*u,h:fh+8*u},{x:0,y:Y+H,w:S,h:S}];placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.ph[0]),4)}}
+    else if(n===1)box(0,X,Y,W,H);
     else if(n===2){const w=(W-gap)/2;box(0,X,Y,w,H);box(1,X+w+gap,Y,w,H)}
     else if(n===3){const w=(W-gap)*.6;box(0,X,Y,w,H);const h=(H-gap)/2;box(1,X+w+gap,Y,W-w-gap,h);box(2,X+w+gap,Y+h+gap,W-w-gap,h)}
     else{const w=(W-gap)/2,h=(H-gap)/2;box(0,X,Y,w,h);box(1,X+w+gap,Y,w,h);box(2,X,Y+h+gap,w,h);box(3,X+w+gap,Y+h+gap,w,h)}
@@ -794,19 +830,27 @@ function photobookModal(){const t=T;if(!t)return;
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
       <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div></div>`:""}
     <div class="field"><label for="pb-r">롤링페이퍼 모양</label><select class="inp" id="pb-r"><option value="ring">가운데 이름 + 둘레 쪽지</option><option value="bubble">말풍선 메시지</option><option value="stamp">우표 엽서</option><option value="card">편지 카드 + 마스킹테이프</option><option value="note">포스트잇</option></select></div>
-    <label class="row" style="gap:8px"><input type="checkbox" id="pb-s" checked> 롤링페이퍼에 스티커 붙이기 <span class="hint">(여행 이모지로 자동)</span></label>
+    <div class="field"><label for="pb-1">사진 한 장 페이지</label><select class="inp" id="pb-1"><option value="pola">폴라로이드 + 스티커</option><option value="full">꽉 채우기</option></select></div>
+    <label class="row" style="gap:8px"><input type="checkbox" id="pb-s" checked> 스티커 붙이기 <span class="hint">(롤링페이퍼 · 폴라로이드, 여행 이모지로 자동)</span></label>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-t" checked> 기록(한 줄 감정 · 일기) 넣기</label>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-p" checked> 나만 보기 기록도 넣기 <span class="hint">(남에게 줄 사진첩이면 끄세요)</span></label>
     <div id="pbOut" class="hint"></div><div id="pbPrev" class="pbprev"></div>
-    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">닫기</button><button type="button" class="btn primary" id="pbGo"${pages.length<3?" disabled":""}>만들기</button></div></div>`);
-  const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
-  m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");prev.innerHTML="";
-    const S=+m.querySelector("#pb-q").value,fmt=m.querySelector("#pb-f").value;const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,orig:S>2000,roll:m.querySelector("#pb-r").value,stk:m.querySelector("#pb-s").checked};
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">닫기</button><button type="button" class="btn" id="pbPv"${pages.length<3?" disabled":""}>미리보기</button><button type="button" class="btn primary" id="pbGo"${pages.length<3?" disabled":""}>만들기</button></div></div>`);
+  const readO=out=>{const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:m.querySelector("#pb-s").checked,single:m.querySelector("#pb-1").value};
     if(dSel&&dSel.value==="couple"){const g=k=>({id:m.querySelector("#pb-p"+k).value,label:m.querySelector("#pb-l"+k).value.trim()||(k==="a"?"Her":"His")});
-      o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";b.disabled=false;return}}
+      o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";return null}}
+    return o};
+  m.querySelector("#pbPv").onclick=async ev=>{const b=ev.currentTarget;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");const o=readO(out);if(!o)return;b.disabled=true;prev.innerHTML="";
+    try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,false):null;
+      for(let k=0;k<pl.length;k++){out.textContent=`미리보기 ${k+1} / ${pl.length}쪽…`;const blob=await pbDraw(t,pl[k],560,o,cover);const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽`;
+        im.onclick=()=>{const l=document.createElement("div");l.className="lightbox";l.innerHTML=`<img src="${im.src}" alt="${k+1}쪽 크게 보기">`;l.onclick=()=>l.remove();document.body.appendChild(l)};prev.appendChild(im)}
+      cover&&cover.close&&cover.close();out.textContent=`${pl.length}쪽 미리보기예요. 눌러서 크게 볼 수 있어요. 옵션을 바꾸고 다시 눌러 보세요.`}
+    catch(e){console.error(e);out.textContent="미리보기를 만들지 못했어요."}b.disabled=false};
+  const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
+  m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut");
+    const S=+m.querySelector("#pb-q").value,fmt=m.querySelector("#pb-f").value;const o=readO(out);if(!o){b.disabled=false;return}o.orig=S>2000;
     try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
-      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S});
-        if(k<4){const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽 미리보기`;prev.appendChild(im)}}
+      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S})}
       cover&&cover.close&&cover.close();const day=t.start||todayISO();
       if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`)}
       else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`)}
@@ -871,7 +915,7 @@ function othersHTML(key){const o=otherNotes(key);const mine=allNotes(key).find(n
 function refreshDrawerOthers(){if(!openEv)return;const b=$("#othersBox");if(b)b.innerHTML=othersHTML("ev-"+openEv)}
 function withChips(t,e){const ids=e.with||t.people.map(p=>p.id);return t.people.map(p=>`<button type="button" class="pchip" data-act="toggleWith" data-id="${p.id}" aria-pressed="${ids.includes(p.id)}"><b>${initial(p.name)}</b>${esc(p.name)}</button>`).join("")}
 function photosHTML(e){
-  return photosOf(e.id).map((p,i)=>`<div class="ph">${phImg(p.id,"사진 "+(i+1),'loading="lazy" data-act="zoom"')}${p.by&&p.by!==L.me?`<span class="by">${esc(pName(T,p.by))}</span>`:""}<button data-act="rmPhoto" data-i="${i}" aria-label="사진 빼기">✕</button></div>`).join("")
+  return photosOf(e.id).map((p,i)=>`<div class="ph">${phImg(p.id,"사진 "+(i+1),'loading="lazy" data-act="zoom"')}${p.by&&p.by!==L.me?`<span class="by">${esc(pName(T,p.by))}</span>`:""}<button data-act="rmPhoto" data-i="${i}" aria-label="사진 빼기">✕</button>${!p.by||p.by===L.me?`<button type="button" class="cap${p.cap?" on":""}" data-act="capPhoto" data-i="${i}">${p.cap?esc(p.cap):"+ 한 줄"}</button>`:(p.cap?`<span class="cap on">${esc(p.cap)}</span>`:"")}</div>`).join("")
     +`<button class="ph-add" data-act="addPhoto">+ 갤러리에서<br>추가</button>`;
 }
 function stars(r){const n=parseFloat(r);if(isNaN(n))return "";return `<span class="stars">★ ${n.toFixed(1)}</span>`}
@@ -1045,6 +1089,12 @@ function letterCard(t){const cnt=key=>allNotes(key).filter(n=>!n.mine&&n.diary&&
     ${toMe?`<p class="hint">✉️ <span data-nt>${LANG==="en"?(toMe===1?"1 note is waiting for you":toMe+" notes are waiting for you"):"나에게 온 쪽지 "+toMe+"개가 기다리고 있어요"}</span></p>`:""}
     <div class="lrows">${rows.map(r=>{const key=r.to==="all"?"letter":"letter-"+r.to;const mine=myNote(key).diary;const n=cnt(key);
       return `<div class="lrow"><span><b>To ${esc(r.name)}</b>${n?` <span class="hint">· 다른 사람 쪽지 ${n}개</span>`:""}</span><button class="btn sm${mine?"":" primary"}" data-act="editLetter" data-to="${r.to}">${mine?"✓ 고치기":"쓰기"}</button></div>`}).join("")}</div></div>`}
+function capModal(e,i){const p=e&&(L.photos[e.id]||[])[i];if(!p)return;
+  const m=modal(`<form class="card"><h3>사진 한 줄</h3><p class="hint">이 사진 아래에 붙어요. 사진첩에도 사진 위에 작게 들어가요.</p>
+    <input class="inp" id="cap-in" maxlength="60" placeholder="예: 정상에서 본 노을" value="${esc(p.cap||"")}" autocomplete="off">
+    <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">저장</button></div></form>`);
+  const inp=m.querySelector("#cap-in");setTimeout(()=>inp.focus(),50);
+  m.querySelector("form").addEventListener("submit",ev=>{ev.preventDefault();const v=inp.value.trim();if(v)p.cap=v;else delete p.cap;putLocal();closeModalEl(m);if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e)})}
 function letterModal(to){if(!L.me){whoModal();return}const key=to==="all"?"letter":"letter-"+to;const n=myNote(key);const name=to==="all"?"우리 모두":pName(T,to);
   const m=modal(`<form class="card"><h3>💌 To ${esc(name)}</h3><p class="hint">${to==="all"?"함께한 모두에게 쓰는 쪽지예요.":esc(name)+"에게만 쓰는 쪽지예요. 사진첩의 'To "+esc(name)+"' 페이지에 붙어요."} 짧아도 좋아요.</p>
     <textarea class="inp" id="lt-text" rows="8" placeholder="이번 여행에서 고마웠던 것, 기억에 남는 순간…">${esc(n.diary||"")}</textarea>
@@ -1163,6 +1213,7 @@ function decorHTML(){const t=T;
   <div class="field"><label>화면 밝기</label>${seg("appearance",[["auto","폰 설정 따라"],["light","밝게"],["dark","어둡게"]])}</div>
   <div class="field"><label>글씨 크기</label>${seg("font",[["normal","보통"],["large","크게"],["xl","아주 크게"]])}</div>
   <div class="field"><label>운전 안내에 쓸 앱</label>${seg("nav",[["google","Google 지도"],["waze","Waze"],["apple","Apple 지도"]])}</div>
+  <div class="field"><label>예약 도우미 링크</label>${seg("book",[["on","켜기"],["off","끄기"]])}</div>
   <div class="field"><label>카테고리 색</label>${Object.entries(CATS).map(([k,v])=>`<div class="catrow"><span class="cchip cat-${k}" style="align-self:flex-start">${v}</span><div class="dots">${SWATCH.map(c=>`<button type="button" class="dot" data-act="setCatColor" data-k="${k}" data-v="${c}" aria-label="${v} 색 ${c}" aria-pressed="${(prefs.cats||{})[k]===c}" style="background:${c}"></button>`).join("")}<button type="button" class="dot reset" data-act="setCatColor" data-k="${k}" data-v="" aria-pressed="${!(prefs.cats||{})[k]}" aria-label="${v} 기본 색">↺</button></div></div>`).join("")}</div>`}
 function decorModal(){modal(`<div class="card decor" style="max-height:92vh;overflow-y:auto">${decorHTML()}</div>`)}
 function refreshDecor(b){const c=b.closest(".decor");if(c){const st=c.scrollTop;c.innerHTML=decorHTML();c.scrollTop=st}needsRender=true}
@@ -1182,7 +1233,7 @@ async function exportMine(out,incPriv,incOrig,dayId){
   const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));
   for(const [evId,list] of Object.entries(L.photos)){if(dayId&&evDay[evId]!==dayId)continue;
     for(const p of list){if(p.by&&p.by!==L.me)continue;const r=await dbGet("photos",p.id).catch(()=>null);if(!r)continue;
-      files.push({name:`photos/${p.id}.jpg`,blob:r.blob});const ent={id:p.id,evId};
+      files.push({name:`photos/${p.id}.jpg`,blob:r.blob});const ent={id:p.id,evId};if(p.cap)ent.cap=p.cap;
       if(incOrig){const o=await dbGet("orig",p.id).catch(()=>null);if(o){const ext=(o.name.match(/\.[a-z0-9]+$/i)||[".jpg"])[0];ent.orig=`originals/${p.id}${ext}`;ent.origName=o.name;ent.origType=o.type;files.push({name:ent.orig,blob:o.blob});origN++}else origMissing++}
       photos.push(ent);out.textContent=`만드는 중… ${photos.length}장`}}
   let cover=null,coverOrig=null;
@@ -1222,9 +1273,9 @@ async function importPhotos(out){
       const have=new Set(Object.values(L.photos).flat().map(p=>p.id));
       if(man.from!==L.me){for(const p of man.photos){if(p.orig&&en.get(p.orig))origs.push({blob:new Blob([en.get(p.orig)],{type:p.origType||"image/jpeg"}),name:p.origName||p.orig.split("/").pop(),type:p.origType})}
         if(man.coverOrig&&en.get(man.coverOrig.file))origs.push({blob:new Blob([en.get(man.coverOrig.file)],{type:man.coverOrig.type||"image/jpeg"}),name:man.coverOrig.name,type:man.coverOrig.type})}
-      for(const p of man.photos){if(have.has(p.id)){skipped++;continue}const data=en.get(`photos/${p.id}.jpg`);if(!data)continue;
+      for(const p of man.photos){if(have.has(p.id)){if(p.cap){const ex=(L.photos[p.evId]||[]).find(x=>x.id===p.id);if(ex)ex.cap=p.cap}skipped++;continue}const data=en.get(`photos/${p.id}.jpg`);if(!data)continue;
         if(!T.events.some(e=>e.id===p.evId)){skipped++;continue}
-        await dbPut("photos",{id:p.id,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});(L.photos[p.evId]=L.photos[p.evId]||[]).push({id:p.id,by:man.from});added++}
+        await dbPut("photos",{id:p.id,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});(L.photos[p.evId]=L.photos[p.evId]||[]).push(p.cap?{id:p.id,by:man.from,cap:p.cap}:{id:p.id,by:man.from});added++}
       if(man.cover&&!L.cover){const data=en.get(`photos/${man.cover}.jpg`);if(data){await dbPut("photos",{id:man.cover,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});L.cover=man.cover}}
       if(man.from!==L.me)(man.notes||[]).forEach(n=>{L.imported=(L.imported||[]).filter(x=>!(x.key===n.key&&x.by===man.from));L.imported.push({key:n.key,by:man.from,mood:n.mood,diary:n.diary});notesN++});
     }catch(e){errs.push(`${f.name}: ${e.message}`)}}
@@ -1383,6 +1434,7 @@ document.addEventListener("click",async ev=>{
       for(const f of files){grid&&grid.insertAdjacentHTML("afterbegin",`<div class="ph"><div class="hint" style="padding:8px">저장 중…</div></div>`);
         try{const id=await savePhoto(f,1800,true);(L.photos[e.id]=L.photos[e.id]||[]).push({id,by:L.me||""});putLocal()}catch(err){toast("사진을 저장하지 못했어요. 저장 공간을 확인해 주세요.")}}
       if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e);break}
+    case "capPhoto":capModal(curEv(),+b.dataset.i);break;
     case "rmPhoto":{const e=curEv();const [p]=L.photos[e.id].splice(+b.dataset.i,1);putLocal();$("#photoGrid").innerHTML=photosHTML(e);if(p)setTimeout(()=>dropPhoto(p.id),400);break}
     case "pickCover":{const [f]=await pickFiles(false);if(!f)break;try{const old=L.cover;L.cover=await savePhoto(f,2400,true);putLocal();render();setTimeout(()=>dropPhoto(old),400);toast("표지 사진을 저장했어요")}catch(err){toast("사진을 저장하지 못했어요")}break}
     case "renamePerson":renamePersonModal(b.dataset.id);break;

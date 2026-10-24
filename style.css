@@ -264,7 +264,7 @@ button.pchip[aria-pressed="true"] b{background:var(--accent-ink);color:var(--acc
 .onote.mine{border-left-color:var(--accent)}
 .onote .by{font-size:13px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .onote p{margin:0;white-space:pre-wrap;max-width:65ch}
-.ph .by{position:absolute;left:4px;bottom:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:5px;padding:0 5px}
+.ph .by{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:5px;padding:0 5px}
 .jphotos figure{margin:0;position:relative}
 .jphotos figcaption{position:absolute;left:6px;bottom:6px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:5px;padding:0 6px}
 .invite .code{font-size:24px;font-weight:600;letter-spacing:.08em;color:var(--accent);background:var(--accent-soft);border-radius:10px;padding:10px 14px;text-align:center;overflow-wrap:anywhere}
@@ -339,7 +339,8 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 .btn.danger:disabled{opacity:.45}
 /* 아주 좁은 화면 (아이폰 SE 등) */
 @media (max-width:360px){.drawer .grid2{grid-template-columns:1fr}}
-.pbprev{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pbprev{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0}
+.pbprev img{cursor:zoom-in}
 .pbprev img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:6px;box-shadow:0 1px 4px rgba(0,0,0,.18)}
 .pchip .pname{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .pchip .pname:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
@@ -360,3 +361,13 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 .w-cta .btn{padding:14px 10px;font-size:15px}
 .w-foot{text-align:center;color:var(--muted);font-size:13px;margin:0}
 .w-foot a{color:var(--muted)}
+/* 예약 도우미 */
+.st-btn.bk{text-decoration:none;color:var(--muted);border-style:dashed}
+.bookhelp .bklinks{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:4px 0 8px}
+.bookhelp .bklinks a{word-break:keep-all;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;border:1px solid var(--line);border-radius:14px;text-decoration:none;color:var(--ink);font-size:13px;font-weight:600;text-align:center;background:var(--bg)}
+.bookhelp .bklinks a span{font-size:22px;line-height:1}
+@media (max-width:360px){.bookhelp .bklinks{grid-template-columns:repeat(2,1fr)}}
+.ck .buy{text-decoration:none;font-size:15px;padding:2px 6px;border:1px dashed var(--line);border-radius:8px;margin-left:auto;opacity:.85}
+/* 사진 한 줄 */
+.ph .cap{position:absolute;left:0;right:0;bottom:0;top:auto;border-radius:0;padding:14px 6px 4px;font-size:11px;line-height:1.3;text-align:left;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.6));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.ph button.cap:not(.on){color:rgba(255,255,255,.85);font-weight:600}
