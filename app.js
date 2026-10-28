@@ -23,14 +23,15 @@ const NAVN={google:"Google 지도",waze:"Waze",apple:"Apple 지도"};
 const FONTS={normal:1,large:1.12,xl:1.25};
 let prefs={appearance:"auto",font:"normal",cats:{},nav:"google",book:"on"};
 // 예약 도우미: 제휴 승인이 나면 여기에 파트너 번호만 넣으면 돼요 (화면은 그대로)
-const AFF={booking:"",gyg:"",amazon:""};
-const hasAff=()=>!!(AFF.booking||AFF.gyg||AFF.amazon);
+const AFF={booking:"",gyg:"",amazon:"",mixbook:"",blurb:"",shutterfly:""};
+const hasAff=()=>Object.values(AFF).some(Boolean);
 const bookOn=()=>prefs.book!=="off";
 const nextDate=d=>{const x=new Date(d+"T12:00:00");x.setDate(x.getDate()+1);return x.toISOString().slice(0,10)};
 function bkURL(kind,o={}){const q=encodeURIComponent;
   if(kind==="stay"){let u=`https://www.booking.com/searchresults.html?ss=${q(o.q||"")}`;if(o.in)u+=`&checkin=${o.in}&checkout=${o.out||nextDate(o.in)}`;if(AFF.booking)u+=`&aid=${q(AFF.booking)}`;return u}
   if(kind==="tour"){let u=`https://www.getyourguide.com/s/?q=${q(o.q||"")}`;if(AFF.gyg)u+=`&partner_id=${q(AFF.gyg)}`;return u}
   if(kind==="shop"){let u=`https://www.amazon.com/s?k=${q(o.q||"")}`;if(AFF.amazon)u+=`&tag=${q(AFF.amazon)}`;return u}
+  if(kind==="print"){const P={mixbook:"https://www.mixbook.com/",blurb:"https://www.blurb.com/",shutterfly:"https://www.shutterfly.com/"};return P[o.to]||"#"}
   if(kind==="car")return "https://www.discovercars.com/";
   if(kind==="esim")return "https://www.airalo.com/";return "#"}
 try{prefs=Object.assign(prefs,JSON.parse(localStorage.getItem("tripnote:prefs")||"{}"))}catch(e){}
@@ -152,7 +153,9 @@ function offerFile(out,blob,name,note){
   out.innerHTML=`<div><b>${esc(name)}</b> · <span class="mono">${fmtSize(blob.size)}</span></div>${note?`<p class="hint">${esc(note)}</p>`:""}
     <div class="row"><button class="btn primary" type="button" data-dl>파일로 저장</button>${canShare?`<button class="btn" type="button" data-sh>공유하기</button>`:""}</div>`;
   out.querySelector("[data-dl]").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},5000);toast("다운로드 폴더(파일 앱)에 저장했어요")};
-  if(canShare)out.querySelector("[data-sh]").onclick=()=>navigator.share({files:[file],title:name}).catch(()=>{});
+  if(canShare)out.querySelector("[data-sh]").onclick=()=>navigator.share({files:[file],title:name}).catch(e=>{if(e&&e.name==="AbortError")return;
+    const box=out.querySelector(".sharefail")||out.appendChild(Object.assign(document.createElement("p"),{className:"warnline sharefail"}));
+    box.textContent=/\.zip$/i.test(name)?"이 폰에서는 압축 파일을 바로 공유할 수 없어요. '파일로 저장'을 누른 뒤, 내 파일 앱(다운로드 폴더)에서 파일을 길게 눌러 공유하세요. 퀵쉐어도 거기서 돼요.":"공유하지 못했어요. '파일로 저장'을 누른 뒤 파일 앱에서 공유해 주세요."});
 }
 
 /* ================= Firebase ================= */
@@ -442,6 +445,14 @@ function evHTML(e,showDay){
     </div></article>`;
 }
 
+// Blurb 7×7 가격 (2026년 10월 공식 가격표 · 기본 20쪽 · 미국 일반 배송 약 $7, 약 2주)
+const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,asOf:"2026년 10월"}; // 배송: 일반 $6.99 영업일 12일 · 표준 $11.99 9일 · 익스프레스 $17.99 6일 · 우선 $24.99 5일 (인쇄 포함)
+function printHelpHTML(fmt,pages){if(!bookOn())return "";const n=Math.max(BLURB.base,pages+(pages%2)),ex=(n-BLURB.base)*BLURB.per;
+  const soft=Math.round(BLURB.soft+ex),hard=Math.round(BLURB.hard+ex);
+  return `<div class="printhelp"><b>🖨 책으로 인쇄하기</b>
+    <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb에서 주문하기</span><small>${fmt==="pdf"?"이 PDF를 그대로 올리면 책이 돼요.":"'PDF 한 파일'로 다시 만든 뒤 그대로 올리면 책이 돼요."} 7×7 정사각이라 가장자리가 조금 잘릴 수 있어요.</small></a>
+    <p class="hint">이 사진첩(${pages}쪽) 예상 가격: 소프트커버 약 $${soft} · 하드커버 약 $${hard} + 배송 $${BLURB.ship}부터. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)</p>
+    <p class="hint">${hasAff()?"제휴 링크예요. 이 링크로 주문하면 같이가J가 수수료를 받을 수 있어요. 가격은 똑같아요.":"인쇄 회사 사이트로 바로 연결돼요. 같이가J는 이 링크로 돈을 받지 않아요."}</p></div>`}
 function evBookHTML(e,day){if(!bookOn()||e.status==="done")return "";const t=T;
   if(e.cat==="stay"&&day&&!/체크\s*아웃|check.?out/i.test(e.title||""))return `<a class="st-btn bk" href="${bkURL("stay",{q:e.place||e.title||t.destination,in:day.date})}" target="_blank" rel="noopener">🏨 <span>숙소 예약</span></a>`;
   if(e.cat==="sight")return `<a class="st-btn bk" href="${bkURL("tour",{q:[e.place||e.title,t.destination].filter(Boolean).join(" ")})}" target="_blank" rel="noopener">🎟 <span>투어·티켓</span></a>`;
@@ -852,8 +863,8 @@ function photobookModal(){const t=T;if(!t)return;
     try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
       for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S})}
       cover&&cover.close&&cover.close();const day=t.start||todayISO();
-      if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`)}
-      else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`)}
+      if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("pdf",pl.length))}
+      else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("jpg",pl.length))}
     }catch(e){console.error(e);out.textContent="사진첩을 만들지 못했어요. 화질을 '보기·공유용'으로 바꿔 다시 해 보세요."}
     b.disabled=false}}
 
@@ -915,7 +926,8 @@ function othersHTML(key){const o=otherNotes(key);const mine=allNotes(key).find(n
 function refreshDrawerOthers(){if(!openEv)return;const b=$("#othersBox");if(b)b.innerHTML=othersHTML("ev-"+openEv)}
 function withChips(t,e){const ids=e.with||t.people.map(p=>p.id);return t.people.map(p=>`<button type="button" class="pchip" data-act="toggleWith" data-id="${p.id}" aria-pressed="${ids.includes(p.id)}"><b>${initial(p.name)}</b>${esc(p.name)}</button>`).join("")}
 function photosHTML(e){
-  return photosOf(e.id).map((p,i)=>`<div class="ph">${phImg(p.id,"사진 "+(i+1),'loading="lazy" data-act="zoom"')}${p.by&&p.by!==L.me?`<span class="by">${esc(pName(T,p.by))}</span>`:""}<button data-act="rmPhoto" data-i="${i}" aria-label="사진 빼기">✕</button>${!p.by||p.by===L.me?`<button type="button" class="cap${p.cap?" on":""}" data-act="capPhoto" data-i="${i}">${p.cap?esc(p.cap):"+ 한 줄"}</button>`:(p.cap?`<span class="cap on">${esc(p.cap)}</span>`:"")}</div>`).join("")
+  const n=photosOf(e.id).length;
+  return photosOf(e.id).map((p,i)=>`<div class="ph">${phImg(p.id,"사진 "+(i+1),`loading="lazy" data-act="phEdit" data-i="${i}"`)}${i===0&&n>1?`<span class="star">⭐ 대표</span>`:""}${p.by&&p.by!==L.me?`<span class="by">${esc(pName(T,p.by))}</span>`:""}<button data-act="rmPhoto" data-i="${i}" aria-label="사진 빼기">✕</button>${!p.by||p.by===L.me?`<button type="button" class="cap${p.cap?" on":""}" data-act="capPhoto" data-i="${i}">${p.cap?esc(p.cap):"+ 한 줄"}</button>`:(p.cap?`<span class="cap on">${esc(p.cap)}</span>`:"")}</div>`).join("")
     +`<button class="ph-add" data-act="addPhoto">+ 갤러리에서<br>추가</button>`;
 }
 function stars(r){const n=parseFloat(r);if(isNaN(n))return "";return `<span class="stars">★ ${n.toFixed(1)}</span>`}
@@ -1089,6 +1101,17 @@ function letterCard(t){const cnt=key=>allNotes(key).filter(n=>!n.mine&&n.diary&&
     ${toMe?`<p class="hint">✉️ <span data-nt>${LANG==="en"?(toMe===1?"1 note is waiting for you":toMe+" notes are waiting for you"):"나에게 온 쪽지 "+toMe+"개가 기다리고 있어요"}</span></p>`:""}
     <div class="lrows">${rows.map(r=>{const key=r.to==="all"?"letter":"letter-"+r.to;const mine=myNote(key).diary;const n=cnt(key);
       return `<div class="lrow"><span><b>To ${esc(r.name)}</b>${n?` <span class="hint">· 다른 사람 쪽지 ${n}개</span>`:""}</span><button class="btn sm${mine?"":" primary"}" data-act="editLetter" data-to="${r.to}">${mine?"✓ 고치기":"쓰기"}</button></div>`}).join("")}</div></div>`}
+async function phEditor(e,i){const list=e&&L.photos[e.id];if(!list||!list[i])return;
+  const l=document.createElement("div");l.className="lightbox phedit";document.body.appendChild(l);
+  const draw=async()=>{const p=list[i],u=await photoURL(p.id);const n=list.length;
+    l.innerHTML=`<div class="phe-top"><span>${i+1} / ${n}${i===0&&n>1?" · ⭐ 대표 사진":""}</span><button type="button" data-x="close">닫기</button></div>
+      <img src="${u||""}" alt="사진 ${i+1}">
+      ${n>1?`<div class="phe-bar"><button type="button" data-x="prev" ${i===0?"disabled":""}>◀ 앞으로</button><button type="button" data-x="star" ${i===0?"disabled":""}>⭐ 대표로</button><button type="button" data-x="next" ${i===n-1?"disabled":""}>뒤로 ▶</button></div>
+      <p class="phe-hint">순서는 이 폰의 여행기와 사진첩에 그대로 쓰여요. 대표 사진은 맨 앞에 와요.</p>`:""}`};
+  const move=j=>{const [p]=list.splice(i,1);list.splice(j,0,p);i=j;putLocal();if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e);draw()};
+  l.addEventListener("click",ev=>{const x=ev.target.closest("[data-x]");if(!x){if(ev.target===l)l.remove();return}const k=x.dataset.x;
+    if(k==="close")l.remove();else if(k==="prev"&&i>0)move(i-1);else if(k==="next"&&i<list.length-1)move(i+1);else if(k==="star"&&i>0){move(0);toast("대표 사진으로 정했어요")}});
+  draw()}
 function capModal(e,i){const p=e&&(L.photos[e.id]||[])[i];if(!p)return;
   const m=modal(`<form class="card"><h3>사진 한 줄</h3><p class="hint">이 사진 아래에 붙어요. 사진첩에도 사진 위에 작게 들어가요.</p>
     <input class="inp" id="cap-in" maxlength="60" placeholder="예: 정상에서 본 노을" value="${esc(p.cap||"")}" autocomplete="off">
@@ -1435,6 +1458,7 @@ document.addEventListener("click",async ev=>{
         try{const id=await savePhoto(f,1800,true);(L.photos[e.id]=L.photos[e.id]||[]).push({id,by:L.me||""});putLocal()}catch(err){toast("사진을 저장하지 못했어요. 저장 공간을 확인해 주세요.")}}
       if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e);break}
     case "capPhoto":capModal(curEv(),+b.dataset.i);break;
+    case "phEdit":phEditor(curEv(),+b.dataset.i);break;
     case "rmPhoto":{const e=curEv();const [p]=L.photos[e.id].splice(+b.dataset.i,1);putLocal();$("#photoGrid").innerHTML=photosHTML(e);if(p)setTimeout(()=>dropPhoto(p.id),400);break}
     case "pickCover":{const [f]=await pickFiles(false);if(!f)break;try{const old=L.cover;L.cover=await savePhoto(f,2400,true);putLocal();render();setTimeout(()=>dropPhoto(old),400);toast("표지 사진을 저장했어요")}catch(err){toast("사진을 저장하지 못했어요")}break}
     case "renamePerson":renamePersonModal(b.dataset.id);break;
