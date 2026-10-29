@@ -116,6 +116,17 @@ function pickFiles(multiple,capture,accept){return new Promise(res=>{const i=doc
   i.onchange=()=>res([...i.files]);i.style.display="none";document.body.appendChild(i);i.click();setTimeout(()=>i.remove(),60000)})}
 const photosOf=evId=>(L&&L.photos[evId])||[];
 
+/* ================= jpg 메타 (사진 파일 안에 일정 정보 숨기기) ================= */
+// JPEG 주석(COM, FFFE) 구간에 "GTJ1"+JSON을 넣어요. 퀵쉐어·에어드롭은 파일을 그대로 옮기니 같이 따라가요.
+async function jpgWithMeta(blob,meta){const b=new Uint8Array(await blob.arrayBuffer());if(b[0]!==0xFF||b[1]!==0xD8)return blob;
+  const pay=enc.encode("GTJ1"+JSON.stringify(meta));if(pay.length>65000)return blob;const len=pay.length+2;
+  const seg=new Uint8Array(4+pay.length);seg[0]=0xFF;seg[1]=0xFE;seg[2]=len>>8;seg[3]=len&255;seg.set(pay,4);
+  return new Blob([b.subarray(0,2),seg,b.subarray(2)],{type:"image/jpeg"})}
+function jpgMeta(b){if(b[0]!==0xFF||b[1]!==0xD8)return null;let i=2;
+  while(i+4<b.length&&b[i]===0xFF){const mk=b[i+1];if(mk===0xDA||mk===0xD9)break;const len=(b[i+2]<<8)|b[i+3];
+    if(mk===0xFE&&len>6){const t=dec.decode(b.subarray(i+4,i+2+len));if(t.startsWith("GTJ1")){try{return JSON.parse(t.slice(4))}catch(e){return null}}}i+=2+len}
+  return null}
+
 /* ================= zip (store, no deps) ================= */
 const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
 function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&0xFF]^(c>>>8);return (c^0xFFFFFFFF)>>>0}
@@ -198,7 +209,7 @@ async function initFirebase(){
 function compose(p){
   const tr=p.trip;const titles=tr.dayTitles||{};
   return {id:tr.id,name:tr.name||"여행",destination:tr.destination||"",start:tr.start,end:tr.end,currency:tr.currency??"$",budget:Number(tr.budget)||0,createdBy:tr.createdBy,example:!!tr.example,owners:tr.owners&&tr.owners.length?tr.owners:[tr.createdBy],viewers:tr.viewers||[],members:tr.members||{},
-    theme:tr.theme||"teal",people:tr.people||[],days:(tr.days||[]).map(d=>({id:d.id,date:d.date,title:titles[d.id]||"",emoji:(tr.dayEmoji||{})[d.id]||""})),
+    theme:tr.theme||"teal",settle:tr.settle==="none"?"none":"split",people:tr.people||[],days:(tr.days||[]).map(d=>({id:d.id,date:d.date,title:titles[d.id]||"",emoji:(tr.dayEmoji||{})[d.id]||""})),
     events:p.events.map(e=>({status:"todo",restaurants:[],stops:[],...e,cat:CATS[e.cat]?e.cat:"etc"})),
     expenses:p.expenses,checklist:p.checklist.slice().sort((a,b)=>(a.order||0)-(b.order||0)),notes:p.notes};
 }
@@ -296,7 +307,7 @@ function dayRouteHTML(t,d){const rem=evsOf(t,d.id).filter(e=>inEv(e,pf||(L&&L.me
 function stopsHTML(e){return (e.stops||[]).map((x,i)=>`<div class="addline"><input class="inp" data-stop="${i}" value="${esc(x)}" placeholder="경유지 ${i+1} (주유소, 휴게소 등)"><button type="button" class="btn sm ghost" data-act="rmStop" data-i="${i}" aria-label="경유지 삭제">✕</button></div>`).join("")}
 const catPick=(sel,act)=>`<div class="catpick" role="group" aria-label="카테고리">${Object.entries(CATS).map(([k,v])=>`<button type="button" class="cat-${k}" data-act="${act}" data-c="${k}" aria-pressed="${sel===k}">${v}</button>`).join("")}</div>`;
 const legend=()=>`<div class="legend">${Object.entries(CATS).map(([k,v])=>`<span class="cat-${k}"><i></i>${v}</span>`).join("")}</div>`;
-const visPick=(key,shared)=>`<div class="vis" role="group" aria-label="공개 범위"><button type="button" data-act="vis" data-k="${key}" data-v="0" aria-pressed="${!shared}">🔒 나만 보기</button><button type="button" data-act="vis" data-k="${key}" data-v="1" aria-pressed="${!!shared}">👥 함께 보기</button></div>`;
+const visPick=(key,shared)=>`<div class="vis" role="group" aria-label="공개 범위"><button type="button" data-act="vis" data-k="${key}" data-v="0" aria-pressed="${!shared}">🔒 글 나만 보기</button><button type="button" data-act="vis" data-k="${key}" data-v="1" aria-pressed="${!!shared}">👥 글 함께 보기</button></div>`;
 function confirmTap(b,label){if(b.dataset.confirm==="1")return true;b.dataset.confirm="1";const o=b.textContent;b.textContent=label||"한 번 더 누르면 삭제";setTimeout(()=>{if(b.isConnected){b.dataset.confirm="";b.textContent=o}},3000);return false}
 function withNames(t,e){if(!t.people.length)return "";const ids=e.with||t.people.map(p=>p.id);if(ids.length===t.people.length)return t.people.length>1?"모두":"";return ids.map(id=>pName(t,id)).filter(Boolean).join(", ")}
 function lastBackupText(){let v=null;try{v=+localStorage.getItem("tripnote:lastBackup")}catch(e){}if(!v)return "아직 없음";const d=Math.floor((Date.now()-v)/864e5);return d<=0?"오늘":d+"일 전"}
@@ -424,7 +435,8 @@ function timelineHTML(ev){
 function evHTML(e,showDay){
   const t=T;const day=t.days.find(d=>d.id===e.dayId);
   const tags=[];const nr=(e.restaurants||[]).length,np=photosOf(e.id).length,nn=allNotes("ev-"+e.id).length;
-  if(nr)tags.push(`맛집 ${nr}`);if(np)tags.push(`사진 ${np}`);if(nn)tags.push(`기록 ${nn}`);
+  const moods=allNotes("ev-"+e.id).filter(n=>n.mood);
+  if(nr)tags.push(`맛집 ${nr}`);if(np)tags.push(`사진 ${np}`);if(nn>moods.length)tags.push(`기록 ${nn}`);
   const ex=sum(t.expenses.filter(x=>x.evId===e.id));if(ex)tags.push(money(ex,t));
   if(showDay&&day)tags.unshift(fmtDate(day.date));
   return `<article class="ev ${e.status} cat-${e.cat}">
@@ -433,6 +445,7 @@ function evHTML(e,showDay){
       <div class="ev-top"><button class="ev-title" data-act="open" data-id="${e.id}">${esc(e.title||"제목 없음")}</button><span class="chip ${e.status}">${ST[e.status]}</span></div>
       ${e.place?`<div class="ev-place">${esc(e.place)}</div>`:""}
       <div class="ev-tags"><span class="cchip cat-${e.cat}">${CATS[e.cat]}</span>${e.with&&t.people.length&&e.with.length<t.people.length?`<span class="who">👤 ${esc(e.with.map(id=>pName(t,id)).filter(Boolean).join(", ")||"정하지 않음")}</span>`:""}${tags.map(x=>`<span>${esc(x)}</span>`).join("")}</div>
+      ${moods.length?`<div class="ev-moods">${moods.slice(0,3).map(n=>`<span><b>${esc(n.mine?"나":pName(t,n.by)||"?")}</b> ${esc(n.mood)}</span>`).join("")}${moods.length>3?`<span class="more">+${moods.length-3}</span>`:""}</div>`:""}
       <div class="ev-actions">${e.status==="hold"?`
         <button class="st-btn primary" data-act="unhold" data-id="${e.id}">📅 일정에 넣기</button>`:`
         <button class="st-btn done" aria-pressed="${e.status==="done"}" data-act="status" data-s="done" data-id="${e.id}">✓ 완료</button>
@@ -446,12 +459,12 @@ function evHTML(e,showDay){
 }
 
 // Blurb 7×7 가격 (2026년 10월 공식 가격표 · 기본 20쪽 · 미국 일반 배송 약 $7, 약 2주)
-const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,asOf:"2026년 10월"}; // 배송: 일반 $6.99 영업일 12일 · 표준 $11.99 9일 · 익스프레스 $17.99 6일 · 우선 $24.99 5일 (인쇄 포함)
+const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월"}; // 배송: 일반 $6.99 영업일 12일 · 표준 $11.99 9일 · 익스프레스 $17.99 6일 · 우선 $24.99 5일 (인쇄 포함)
 function printHelpHTML(fmt,pages){if(!bookOn())return "";const n=Math.max(BLURB.base,pages+(pages%2)),ex=(n-BLURB.base)*BLURB.per;
   const soft=Math.round(BLURB.soft+ex),hard=Math.round(BLURB.hard+ex);
   return `<div class="printhelp"><b>🖨 책으로 인쇄하기</b>
     <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb에서 주문하기</span><small>${fmt==="pdf"?"이 PDF를 그대로 올리면 책이 돼요.":"'PDF 한 파일'로 다시 만든 뒤 그대로 올리면 책이 돼요."} 7×7 정사각이라 가장자리가 조금 잘릴 수 있어요.</small></a>
-    <p class="hint">이 사진첩(${pages}쪽) 예상 가격: 소프트커버 약 $${soft} · 하드커버 약 $${hard} + 배송 $${BLURB.ship}부터. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)</p>
+    <p class="hint">이 사진첩(${pages}쪽) 예상 가격: 소프트커버 약 $${soft} · 하드커버 약 $${hard} + PDF 업로드 $${BLURB.pdf} + 배송 $${BLURB.ship}부터. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)</p>
     <p class="hint">${hasAff()?"제휴 링크예요. 이 링크로 주문하면 같이가J가 수수료를 받을 수 있어요. 가격은 똑같아요.":"인쇄 회사 사이트로 바로 연결돼요. 같이가J는 이 링크로 돈을 받지 않아요."}</p></div>`}
 function evBookHTML(e,day){if(!bookOn()||e.status==="done")return "";const t=T;
   if(e.cat==="stay"&&day&&!/체크\s*아웃|check.?out/i.test(e.title||""))return `<a class="st-btn bk" href="${bkURL("stay",{q:e.place||e.title||t.destination,in:day.date})}" target="_blank" rel="noopener">🏨 <span>숙소 예약</span></a>`;
@@ -504,12 +517,13 @@ function budgetHTML(t){
   const ex=t.expenses,spent=sum(ex),bud=Number(t.budget)||0,left=bud-spent;
   const byCat=Object.keys(CATS).map(k=>[k,sum(ex.filter(x=>x.cat===k))]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
   const maxCat=Math.max(1,...byCat.map(x=>x[1]));
-  const byP=t.people.map(p=>[p,sum(ex.filter(x=>x.paidBy===p.id))]);
-  const share=t.people.length?spent/t.people.length:0;
+  const off=t.settle==="none";const isTreat=x=>!off&&!!x.treat&&!!x.paidBy;const exS=ex.filter(x=>!isTreat(x));
+  const byP=t.people.map(p=>[p,sum(exS.filter(x=>x.paidBy===p.id)),sum(ex.filter(x=>isTreat(x)&&x.paidBy===p.id))]);
+  const share=t.people.length?sum(exS)/t.people.length:0;
   const list=[...t.days.map(d=>d.id),""].map(did=>{const items=ex.filter(x=>(x.dayId||"")===did).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));if(!items.length)return "";const d=t.days.find(x=>x.id===did);
     return `<div class="exp-day">${d?`Day ${t.days.indexOf(d)+1} · ${fmtDate(d.date)}`:"날짜 미지정"} · ${money(sum(items),t)}</div>`+items.map(x=>`<div class="exp cat-${x.cat}">
       ${rcCell(x)}
-      <div style="min-width:0"><div class="t">${esc(x.title||CATS[x.cat])}</div><div class="m"><span class="cchip cat-${x.cat}">${CATS[x.cat]}</span>${x.paidBy?`<span>${esc(pName(t,x.paidBy))} 결제</span>`:""}${x.memo?`<span>${esc(x.memo)}</span>`:""}</div></div>
+      <div style="min-width:0"><div class="t">${esc(x.title||CATS[x.cat])}</div><div class="m"><span class="cchip cat-${x.cat}">${CATS[x.cat]}</span>${x.paidBy?`<span>${esc(pName(t,x.paidBy))} ${isTreat(x)?"🎁 쏨":"결제"}</span>`:""}${x.memo?`<span>${esc(x.memo)}</span>`:""}</div></div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><span class="a">${money(x.amount,t)}</span><button class="btn sm ghost" data-act="editExp" data-id="${x.id}">수정</button></div></div>`).join("")}).join("");
   return `<div style="display:flex;flex-direction:column;gap:14px;margin-top:16px">
     <div class="sumgrid">
@@ -522,9 +536,10 @@ function budgetHTML(t){
       ${byCat.length?`<div class="stack">${byCat.map(([k,v])=>`<span class="cat-${k}" style="width:${v/spent*100}%" title="${CATS[k]} ${money(v,t)}"></span>`).join("")}</div>
       <div class="catbars">${byCat.map(([k,v])=>`<div class="cbar cat-${k}"><span>${CATS[k]}</span><div class="track"><span style="width:${v/maxCat*100}%"></span></div><span class="amt">${money(v,t)}</span></div>`).join("")}</div>`:`<p class="hint">지출을 추가하면 카테고리별로 모여요.</p>`}
     </div>
-    ${t.people.length?`<div class="card"><h3>누가 냈나 <span class="hint mono">1인당 ${money(share,t)}</span></h3>
-      <div class="catbars">${byP.map(([p,v])=>{const diff=v-share;return `<div class="cbar" style="grid-template-columns:72px 1fr auto"><span>${esc(p.name)}</span><span class="mono">${money(v,t)}</span><span class="amt" style="color:${Math.abs(diff)<0.01?"var(--muted)":diff>0?"var(--done)":"var(--hold)"}">${Math.abs(diff)<0.01?"정산 완료":diff>0?"받을 돈 "+money(diff,t):"낼 돈 "+money(-diff,t)}</span></div>`}).join("")}</div>
-      <p class="hint">모두 똑같이 나눈다고 가정한 계산이에요. 결제한 사람이 지정된 지출만 합산합니다.</p></div>`:""}
+    ${t.people.length?`<div class="card"><h3>누가 냈나 ${off?"":`<span class="hint mono">1인당 ${money(share,t)}</span>`}</h3>
+      <div class="catbars">${byP.map(([p,v0,tr])=>{const v=off?v0+tr:v0;const diff=v0-share;return `<div class="cbar" style="grid-template-columns:72px 1fr auto"><span>${esc(p.name)}</span><span class="mono">${money(v,t)}${tr&&!off?`<small class="treatline">🎁 쏜 금액 ${money(tr,t)}</small>`:""}</span>${off?`<span class="amt" style="color:var(--muted)">${spent?Math.round(v/spent*100):0}%</span>`:`<span class="amt" style="color:${Math.abs(diff)<0.01?"var(--muted)":diff>0?"var(--done)":"var(--hold)"}">${Math.abs(diff)<0.01?"정산 완료":diff>0?"받을 돈 "+money(diff,t):"낼 돈 "+money(-diff,t)}</span>`}</div>`}).join("")}</div>
+      <p class="hint">${off?"가계부로만 기록하는 여행이에요. 누가 얼마를 냈는지만 보여요.":"🎁 쏜 지출을 빼고 나머지를 모두 똑같이 나눈 계산이에요. 결제한 사람이 지정된 지출만 합산합니다. 지출을 넣을 때 '🎁 낸 사람이 쏨'을 체크하면 나눠 내지 않아요."}</p>
+      <button type="button" class="linkbtn" data-act="settle" data-v="${off?"split":"none"}">${off?"💸 정산 켜기 (나눠 내기)":"정산 끄기 (부부 · 가족 가계부)"}</button></div>`:""}
     <div class="row" style="justify-content:space-between"><h2 style="font-size:18px">지출 내역</h2><button class="btn primary" data-act="addExp">+ 지출 추가</button></div>
     <div style="display:flex;flex-direction:column;gap:8px">${list||`<div class="empty"><p>영수증을 찍어 두고 금액만 입력하면, 모두의 지출이 카테고리별·사람별로 정리돼요. 영수증 사진은 찍은 사람 폰에만 저장돼요.</p><button class="btn primary" data-act="addExp">+ 첫 지출 추가</button></div>`}</div>
   </div>`;
@@ -554,7 +569,7 @@ function journalHTML(t){
     </section>`}).join("");
   return `<div class="journal-list">${cover}
     ${t.people.length>=2?letterCard(t):""}
-    <div class="card"><h3>여행기 완성하기</h3><p class="hint">1) 여행이 끝나면 각자 ⋯ → '내 사진 보내기'로 파일을 만들어 한 사람에게 보내요. 2) 받은 사람은 '사진 합치기'로 모아요. 3) '여행기용 내보내기' 파일을 Claude 채팅에 올리고 "여행기 만들어줘"라고 하면 됩니다.</p><div class="row"><button class="btn sm primary" data-act="photobook">📖 사진첩 만들기</button><button class="btn sm" data-act="settings">사진 모으기 · 내보내기</button></div></div>
+    <div class="card"><h3>여행기 완성하기</h3><p class="hint">1) 여행이 끝나면 각자 ⋯ 메뉴 → '내 사진 보내기'로 사진을 한 사람에게 보내요. 2) 받은 사람은 '사진 합치기'로 모아요. 3) 아래 📖 사진첩 만들기를 눌러요.</p><div class="row"><button class="btn sm primary" data-act="photobook">📖 사진첩 만들기</button><button class="btn sm" data-act="settings">사진 모으기 · 내보내기</button></div></div>
     ${days||`<div class="empty"><span class="eyebrow">여행기</span><h2>완료한 일정이 여기 쌓여요</h2><p>일정을 완료로 넘기고 상세 화면에서 기록과 사진을 남기면, 날짜별 여행기로 정리됩니다. '함께 보기'로 남긴 기록은 다른 사람 여행기에도 보여요.</p></div>`}</div>`;
 }
 
@@ -898,11 +913,14 @@ function openDrawer(id){
         <div class="field"><label for="f-memo">메모 (예약번호, 준비물 등 · 함께 보기)</label><textarea class="inp" id="f-memo" data-f="memo">${esc(e.memo)}</textarea></div>
       </div>
       <div class="card">
-        <h3>내 기록 <span id="visBox">${visPick(key,mn.shared)}</span></h3>
+        <h3>내 글 <span id="visBox">${visPick(key,mn.shared)}</span></h3>
         <div class="field"><label for="n-mood">한 줄 감정 · 평가</label><input class="inp" id="n-mood" data-note="mood" data-k="${key}" value="${esc(mn.mood)}" placeholder="예: 최고였음, 또 오고 싶다"></div>
         <div class="field"><label for="n-diary">일기</label><textarea class="inp" id="n-diary" data-note="diary" data-k="${key}" rows="4" placeholder="무엇을 보고, 먹고, 느꼈는지">${esc(mn.diary)}</textarea></div>
-        <div class="field"><label>사진 <span class="hint">이 폰에 저장돼요</span></label><div class="photos" id="photoGrid">${photosHTML(e)}</div></div>
         <div id="othersBox">${othersHTML(key)}</div>
+      </div>
+      <div class="card">
+        <h3>📷 사진 <span class="hint">이 폰에만 저장 · 여행 후에 모아요</span></h3>
+        <div class="photos" id="photoGrid">${photosHTML(e)}</div>
       </div>
       <div class="card">
         <h3>이 일정의 지출 <span class="row"><span class="hint mono">${money(sum(exs),t)}</span><button class="btn sm" data-act="addExpEv">+ 영수증·지출</button></span></h3>
@@ -993,6 +1011,7 @@ function expModal(xid,preset){
     <div class="field"><label>카테고리</label><div id="xCat">${catPick(st.cat,"xCat")}</div></div>
     <div class="grid2"><div class="field"><label for="x-day">날짜</label><select class="inp" id="x-day">${dayOpts}</select></div>
       <div class="field"><label for="x-paid">낸 사람</label><select class="inp" id="x-paid">${pOpts}</select></div></div>
+    ${t.people.length>1&&t.settle!=="none"?`<label class="row treat" style="gap:8px"><input type="checkbox" id="x-treat" ${x.treat?"checked":""}> 🎁 낸 사람이 쏨 <span class="hint">(나눠 내지 않아요 · 기록은 남아요)</span></label>`:""}
     <div class="field"><label for="x-memo">메모</label><input class="inp" id="x-memo" value="${esc(x.memo)}" placeholder="팁 포함, 카드 결제 등"></div>
     <div class="row" style="justify-content:space-between">${xid?`<button type="button" class="btn sm danger" data-act="delExp" data-id="${xid}">삭제</button>`:"<span></span>"}
       <div class="row"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">저장</button></div></div></form>`);
@@ -1001,7 +1020,7 @@ function expModal(xid,preset){
     const amt=parseFloat(String(m.querySelector("#x-amt").value).replace(/[^0-9.\-]/g,""));
     if(isNaN(amt)){toast("금액을 숫자로 넣어주세요");return}
     const id=xid||("x"+uid());const old=L.receipts[id];
-    const data={title:m.querySelector("#x-title").value.trim(),amount:amt,cat:st.cat,dayId:m.querySelector("#x-day").value,paidBy:m.querySelector("#x-paid").value,memo:m.querySelector("#x-memo").value.trim(),evId:x.evId||"",
+    const data={title:m.querySelector("#x-title").value.trim(),amount:amt,cat:st.cat,dayId:m.querySelector("#x-day").value,paidBy:m.querySelector("#x-paid").value,memo:m.querySelector("#x-memo").value.trim(),evId:x.evId||"",treat:m.querySelector("#x-treat")?m.querySelector("#x-treat").checked:!!x.treat,
       receiptBy:st.receipt?(L.me||"?"):(x.receiptBy&&x.receiptBy!==L.me?x.receiptBy:""),createdAt:x.createdAt||Date.now(),by:x.by||L.me||""};
     w(FB.setDoc(ref.d("expenses",id),data));
     if(st.receipt)L.receipts[id]=st.receipt;else delete L.receipts[id];putLocal();if(old&&old!==st.receipt)setTimeout(()=>dropPhoto(old),400);
@@ -1017,11 +1036,13 @@ function tripModal(edit){
     <div class="grid2"><div class="field"><label for="t-start">시작일</label><input class="inp mono" type="date" id="t-start" required value="${t?.start||today}"></div>
       <div class="field"><label for="t-end">종료일</label><input class="inp mono" type="date" id="t-end" required value="${t?.end||today}"></div></div>
     ${edit?"":`<div class="field"><label for="t-me">내 이름</label><input class="inp" id="t-me" required placeholder="예: 나, 민수"></div>
-      <div class="field"><label for="t-people">함께 가는 사람 (쉼표로 구분, 각자 참여할 때 넣어도 돼요)</label><input class="inp" id="t-people" placeholder="엄마, 아빠"></div>`}
+      <div class="field"><label for="t-people">함께 가는 사람 (쉼표로 구분, 각자 참여할 때 넣어도 돼요)</label><input class="inp" id="t-people" placeholder="엄마, 아빠"></div>
+      <div class="field"><label>💸 비용을 나눠 내나요?</label><div class="seg wide" role="group" id="t-settle"><button type="button" data-v="split" aria-pressed="true">나눠 내요 (친구 · 형제)</button><button type="button" data-v="none" aria-pressed="false">안 나눠요 (부부 · 가족 가계부)</button></div><p class="hint">나중에 예산 탭에서 바꿀 수 있어요.</p></div>`}
     <p class="hint">${edit?"기간을 줄이면 빠지는 날짜의 일정은 보류함으로 옮겨져요. 바꾼 내용은 모두에게 보여요.":"기간에 맞춰 날짜별 탭과 기본 준비 체크리스트가 만들어지고, 초대 코드가 생겨요 (최대 60일)."}</p>
     <p class="hint" id="t-err" style="color:var(--danger)" hidden></p>
     <div class="row" style="justify-content:space-between">${edit?`<div class="row"><button type="button" class="btn sm" data-act="leave">이 폰에서만 빼기</button>${isOwner()?`<button type="button" class="btn sm danger" data-act="delTrip">모두에게서 삭제</button>`:""}</div>`:"<span></span>"}
     <div class="row"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">${edit?"저장":"만들기"}</button></div></div></form>`);
+  const sg=m.querySelector("#t-settle");if(sg)sg.addEventListener("click",ev=>{const x=ev.target.closest("button[data-v]");if(!x)return;sg.querySelectorAll("button").forEach(y=>y.setAttribute("aria-pressed",String(y===x)))});
   m.querySelector("form").addEventListener("submit",async ev=>{ev.preventDefault();
     const name=m.querySelector("#t-name").value.trim(),dest=m.querySelector("#t-dest").value.trim(),s=m.querySelector("#t-start").value,e=m.querySelector("#t-end").value;
     const err=m.querySelector("#t-err");
@@ -1037,7 +1058,8 @@ function tripModal(edit){
     }else{
       const me=m.querySelector("#t-me").value.trim();if(!me){err.textContent="내 이름을 넣어주세요.";err.hidden=false;return}
       const others=m.querySelector("#t-people").value.split(",").map(x=>x.trim()).filter(Boolean);
-      closeModalEl(m);await createTrip({name,destination:dest,start:s,end:e,people:[me,...others],meIndex:0});
+      const sb=m.querySelector('#t-settle [aria-pressed="true"]');
+      closeModalEl(m);await createTrip({name,destination:dest,start:s,end:e,people:[me,...others],meIndex:0,settle:sb&&sb.dataset.v==="none"?"none":"split"});
     }
   });
 }
@@ -1049,7 +1071,7 @@ async function createTrip(o,tid){
   const emo={};(o.days||[]).forEach(d=>{const did=byDate[d.date];if(did&&d.title)titles[did]=String(d.title);if(did&&d.emoji)emo[did]=String(d.emoji).slice(0,8)});
   const meId=o.meIndex!=null&&people[o.meIndex]?people[o.meIndex].id:"";
   const b=chunkedBatch();let ops=1;
-  b.set(FB.doc(fs,"trips",tid),{name:o.name||"새 여행",destination:o.destination||"",start:o.start,end:o.end,currency:o.currency||"$",budget:Number(o.budget)||0,days,dayTitles:titles,dayEmoji:emo,theme:THEMES[o.theme]?o.theme:"teal",people,createdBy:myUid,owners:[myUid],viewers:[],members:meId?{[myUid]:meId}:{},createdAt:Date.now(),updatedAt:Date.now(),example:!!o.example});
+  b.set(FB.doc(fs,"trips",tid),{name:o.name||"새 여행",destination:o.destination||"",start:o.start,end:o.end,currency:o.currency||"$",budget:Number(o.budget)||0,days,dayTitles:titles,dayEmoji:emo,theme:THEMES[o.theme]?o.theme:"teal",people,createdBy:myUid,owners:[myUid],viewers:[],members:meId?{[myUid]:meId}:{},createdAt:Date.now(),updatedAt:Date.now(),example:!!o.example,settle:o.settle==="none"?"none":"split"});
   const ck=(o.checklist&&o.checklist.length?o.checklist.map(c=>[PREP[c.cat]?c.cat:"etc",String(c.text||c),!!c.done]):DEFAULT_CK.map(([c,x])=>[c,tt(x)]));
   ck.forEach(([c,x,dn],i)=>{b.set(FB.doc(fs,"trips",tid,"checklist","c"+uid()),{cat:c,text:x,done:!!dn,order:i});ops++});
   (o.days||[]).forEach(d=>{const did=byDate[d.date];if(!did)return;(d.events||[]).forEach(e=>{if(ops>480)return;b.set(FB.doc(fs,"trips",tid,"events","e"+uid()),evFrom(e,did,people));ops++})});
@@ -1199,18 +1221,23 @@ async function settingsModal(){
     <button type="button" class="btn" data-act="decor">🎨 꾸미기 · 화면 · 내비 앱</button><hr>
     ${t?`<span class="eyebrow">이 여행 · ${esc(t.name)}</span>
     <div class="slist">
-      <button type="button" class="btn" data-act="expMine">내 사진 보내기 (모으기용)</button>
+      <b class="mhead">📷 사진 모으기</b>
       <div class="row"><label class="hint" for="mineDay">보낼 날짜</label><select class="inp" id="mineDay" style="width:auto"><option value="">모든 날</option>${t.days.map((d,i)=>`<option value="${d.id}">Day ${i+1} · ${fmtDate(d.date)}</option>`).join("")}</select></div>
+      <button type="button" class="btn primary" data-act="sendJpg">내 사진 보내기 (퀵쉐어 · 에어드롭)</button>
+      <p class="hint">내가 넣은 사진과 사진 한 줄이 사진 파일 그대로 가요.</p>
+      <div class="out" id="jpgOut"></div>
+      <button type="button" class="btn" data-act="impPhotos">사진 합치기 (받은 사진 · 파일 넣기)</button>
+      <div class="out" id="impOut"></div>
+      <details class="adv"><summary>고급</summary>
+      <button type="button" class="btn" data-act="expMine">기록 · 원본까지 보내기 (파일 하나)</button>
       <label class="hint"><input type="checkbox" id="incOrig" checked> 원본 사진 포함 (받는 사람 갤러리에 저장돼요)</label>
       <label class="hint"><input type="checkbox" id="incPriv"> '나만 보기' 기록도 함께 보내기</label>
       <div class="out" id="mineOut"></div>
       <button type="button" class="btn ghost sm" data-act="clearOrig" id="clearOrigBtn">앱에 보관 중인 원본 정리</button>
-      <button type="button" class="btn" data-act="impPhotos">사진 합치기 (받은 파일 넣기)</button>
-      <div class="out" id="impOut"></div>
-      <button type="button" class="btn" data-act="expJournal">여행기용 내보내기</button>
+      <button type="button" class="btn" data-act="expJournal">Claude용 데이터 내보내기</button>
       <div class="row"><label class="hint" for="jSize">사진 크기</label><select class="inp" id="jSize" style="width:auto"><option value="1280">보통 (1280px)</option><option value="900">작게 (900px, 용량 절약)</option></select></div>
-      <p class="hint">모든 사람의 함께 보기 기록, 내 기록, 이 폰에 모인 사진과 지출이 들어가요. Claude 채팅에 올리고 "여행기 만들어줘"라고 하세요.</p>
-      <div class="out" id="jOut"></div>
+      <p class="hint">모든 사람의 함께 보기 기록, 내 기록, 이 폰에 모인 사진과 지출이 들어가요. Claude 채팅에 올리고 "여행기 다듬어 줘"라고 하면 글로 된 여행기를 만들어 줘요.</p>
+      <div class="out" id="jOut"></div></details>
       <button type="button" class="btn" data-act="pasteTrip">Claude 일정 붙여넣기</button>
     </div><hr>`:`<div class="slist"><button type="button" class="btn" data-act="pasteTrip">Claude 일정 붙여넣기</button></div><hr>`}
     <span class="eyebrow">이 폰</span>
@@ -1250,6 +1277,22 @@ function emojiModal(dayId){const d=T&&T.days.find(x=>x.id===dayId);if(!d)return;
   modal(`<div class="card"><h3>${fmtDate(d.date,true)} 이모지 <button type="button" class="btn sm" data-act="closeModal">닫기</button></h3>
   <div class="emogrid">${EMOJIS.map(x=>`<button type="button" data-act="setEmoji" data-day="${d.id}" data-v="${x}" aria-pressed="${d.emoji===x}">${x}</button>`).join("")}</div>
   <div class="row" style="justify-content:space-between"><span class="hint">날짜 탭과 여행기에 붙어요 · 모두에게 보여요</span><button type="button" class="btn sm ghost" data-act="setEmoji" data-day="${d.id}" data-v="">빼기</button></div></div>`)}
+async function sendJpgs(out,dayId){
+  out.textContent="준비 중…";flushAll();const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));const files=[];const stamp=Date.now().toString(36);
+  for(const [evId,list] of Object.entries(L.photos)){if(dayId&&evDay[evId]!==dayId)continue;
+    for(const p of list){if(p.by&&p.by!==L.me)continue;const r=await dbGet("photos",p.id).catch(()=>null);if(!r)continue;
+      const meta={tid:curId,ev:evId,id:p.id,by:L.me||""};if(p.cap)meta.cap=p.cap;
+      files.push(new File([await jpgWithMeta(r.blob,meta)],`gotripj-${stamp}-${String(files.length+1).padStart(3,"0")}.jpg`,{type:"image/jpeg"}));out.textContent=`준비 중… ${files.length}장`}}
+  if(!files.length){out.textContent="보낼 사진이 아직 없어요.";return}
+  let ok=false;try{ok=!!(navigator.canShare&&navigator.canShare({files:files.slice(0,1)}))}catch(e){}
+  if(!ok){out.innerHTML=`<p class="warnline">이 기기에서는 사진을 바로 공유할 수 없어요. 아래 '고급 → 기록·원본까지 보내기(파일 하나)'를 써 주세요.</p>`;return}
+  const B=10,N=Math.ceil(files.length/B);let k=0;
+  const draw=()=>{if(k>=N){out.innerHTML=`<p><b>✓ ${files.length}장을 모두 보냈어요.</b></p><p class="hint">받은 사람은 메뉴 → '사진 합치기'에서 받은 사진들을 고르면 제자리에 들어가요.</p>`;return}
+    const n=Math.min(B,files.length-k*B);
+    out.innerHTML=`<p>사진 ${files.length}장${N>1?` · ${N}번에 나눠 보내요 (한 번에 ${B}장까지)`:""}</p><button type="button" class="btn primary" data-sendnext>📤 ${N>1?`${k+1}/${N}번째 `:""}보내기 (${n}장)</button><p class="hint">공유 창에서 퀵쉐어, 에어드롭, 카톡 등을 골라요.</p>`;
+    out.querySelector("[data-sendnext]").onclick=()=>navigator.share({files:files.slice(k*B,k*B+B)}).then(()=>{k++;draw()}).catch(e=>{if(e&&e.name==="AbortError")return;
+      out.insertAdjacentHTML("beforeend",`<p class="warnline">보내지 못했어요. '고급 → 기록·원본까지 보내기(파일 하나)'를 써 주세요.</p>`)})};
+  draw()}
 async function exportMine(out,incPriv,incOrig,dayId){
   out.textContent="만드는 중…";flushAll();
   const files=[],photos=[];let origN=0,origMissing=0;
@@ -1287,9 +1330,15 @@ function origSaveUI(out,list){
   draw();
 }
 async function importPhotos(out){
-  const files=await pickFiles(true,false,".zip,application/zip");if(!files.length)return;
-  let added=0,skipped=0,notesN=0;const errs=[],origs=[];
+  const files=await pickFiles(true,false,".zip,application/zip,image/jpeg,.jpg,.jpeg");if(!files.length)return;
+  let added=0,skipped=0,notesN=0,unknown=0;const errs=[],origs=[];
   for(const f of files){out.textContent=`${f.name} 읽는 중…`;
+    if(!/\.zip$/i.test(f.name)&&f.type!=="application/zip"){try{const b=new Uint8Array(await f.arrayBuffer());const mt=jpgMeta(b);
+        if(!mt||!mt.id||!mt.ev){unknown++;continue}if(mt.tid&&mt.tid!==curId){errs.push(`${f.name}: 다른 여행의 사진이에요`);continue}
+        if(!T.events.some(e=>e.id===mt.ev)){skipped++;continue}
+        const ex=Object.values(L.photos).flat().find(x=>x.id===mt.id);if(ex){if(mt.cap)ex.cap=mt.cap;skipped++;continue}
+        await dbPut("photos",{id:mt.id,blob:new Blob([b],{type:"image/jpeg"}),created:Date.now()});const ent={id:mt.id,by:mt.by||""};if(mt.cap)ent.cap=mt.cap;
+        (L.photos[mt.ev]=L.photos[mt.ev]||[]).push(ent);added++}catch(e){errs.push(`${f.name}: 읽지 못했어요`)}continue}
     try{const en=await readZip(new Uint8Array(await f.arrayBuffer()));const mf=en.get("manifest.json");if(!mf)throw new Error("사진 보내기 파일이 아니에요");
       const man=JSON.parse(dec.decode(mf));if(man.app!=="tripnote-photos")throw new Error("사진 보내기 파일이 아니에요");
       if(man.tid!==curId)throw new Error(`다른 여행(${man.trip||"?"})의 파일이에요`);
@@ -1303,7 +1352,7 @@ async function importPhotos(out){
       if(man.from!==L.me)(man.notes||[]).forEach(n=>{L.imported=(L.imported||[]).filter(x=>!(x.key===n.key&&x.by===man.from));L.imported.push({key:n.key,by:man.from,mood:n.mood,diary:n.diary});notesN++});
     }catch(e){errs.push(`${f.name}: ${e.message}`)}}
   putLocal();await flushLocal();
-  out.innerHTML=`<div>앱에 사진 ${added}장을 합쳤어요${skipped?` (이미 있거나 지워진 일정 ${skipped}장 제외)`:""}${notesN?` · 기록 ${notesN}개`:""}.</div>${errs.map(x=>`<p class="warnline">${esc(x)}</p>`).join("")}`;
+  out.innerHTML=`<div>앱에 사진 ${added}장을 합쳤어요${skipped?` (이미 있거나 지워진 일정 ${skipped}장 제외)`:""}${notesN?` · 기록 ${notesN}개`:""}.</div>${unknown?`<p class="warnline">${unknown}장은 어느 일정 사진인지 알 수 없어서 넣지 못했어요. 같이가J의 '내 사진 보내기'로 받은 사진만 합칠 수 있어요. 아이폰 사진 앱을 거치면 정보가 지워질 수 있으니, 그럴 땐 '파일 하나'로 받아 주세요.</p>`:""}${errs.map(x=>`<p class="warnline">${esc(x)}</p>`).join("")}`;
   origSaveUI(out,origs);
   needsRender=true;
 }
@@ -1449,7 +1498,7 @@ document.addEventListener("click",async ev=>{
     case "setCatColor":{const k=b.dataset.k,v=b.dataset.v;prefs.cats=Object.assign({},prefs.cats);if(v)prefs.cats[k]=v;else delete prefs.cats[k];savePrefs();refreshDecor(b);break}
     case "toggleWith":{const e=curEv();let ids=e.with||t.people.map(p=>p.id);ids=ids.includes(b.dataset.id)?ids.filter(i=>i!==b.dataset.id):[...ids,b.dataset.id];e.with=ids;patchEv(e.id,{with:ids});$("#withRow").innerHTML=withChips(t,e);break}
     case "vis":{if(b.closest(".modal"))break;const key=b.dataset.k;const shared=b.dataset.v==="1";if(shared&&!L.me){whoModal();break}
-      setMyNote(key,{shared},true);$("#visBox").innerHTML=visPick(key,shared);toast(shared?"함께 보기: 다른 사람도 이 기록을 볼 수 있어요":"나만 보기: 이 폰에만 저장돼요");break}
+      setMyNote(key,{shared},true);$("#visBox").innerHTML=visPick(key,shared);toast(shared?"글 함께 보기: 다른 사람도 이 글을 볼 수 있어요 (사진은 여행 후에 모아요)":"글 나만 보기: 이 폰에만 저장돼요");break}
     case "dupEv":{const e=curEv();flushPatches();const {id,...rest}=e;const nid="e"+uid();w(FB.setDoc(ref.d("events",nid),clean({...rest,status:"todo",restaurants:(e.restaurants||[]).map(r=>({...r,id:uid()})),createdAt:Date.now()})));setTimeout(()=>openDrawer(nid),150);toast("복제했어요");break}
     case "delEv":{if(!confirmTap(b))break;const id=openEv;patches.ev.delete(id);w(FB.deleteDoc(ref.d("events",id)));t.expenses.filter(x=>x.evId===id).forEach(x=>w(FB.updateDoc(ref.d("expenses",x.id),{evId:""})));
       const ph=photosOf(id);delete L.photos[id];putLocal();setTimeout(()=>ph.forEach(p=>dropPhoto(p.id)),400);closeDrawer();toast("삭제했어요");break}
@@ -1484,6 +1533,8 @@ document.addEventListener("click",async ev=>{
     case "editLetter":letterModal(b.dataset.to||"all");break;
     case "expMine":{const m=b.closest(".modal");b.disabled=true;await exportMine(m.querySelector("#mineOut"),m.querySelector("#incPriv").checked,m.querySelector("#incOrig").checked,m.querySelector("#mineDay").value).catch(e=>{console.error(e);toast("파일을 만들지 못했어요")});b.disabled=false;break}
     case "clearOrig":{if(!confirmTap(b,"보내기를 마쳤다면 한 번 더 누르세요"))break;const all=await dbAll("orig").catch(()=>[]);let n=0;for(const o of all)if(o.tid===curId){await dbDel("orig",o.id);n++}b.textContent=`원본 ${n}장을 정리했어요 (갤러리 원본은 그대로예요)`;b.disabled=true;break}
+    case "sendJpg":{const m=b.closest(".modal");b.disabled=true;await sendJpgs(m.querySelector("#jpgOut"),m.querySelector("#mineDay").value).catch(e=>{console.error(e);toast("사진을 준비하지 못했어요")});b.disabled=false;break}
+    case "settle":{const v=b.dataset.v==="none"?"none":"split";t.settle=v;patchTrip({settle:v});render();toast(v==="none"?"정산을 껐어요. 가계부로만 기록해요":"정산을 켰어요");break}
     case "impPhotos":importPhotos(b.closest(".modal").querySelector("#impOut"));break;
     case "expBackup":b.disabled=true;await exportBackup(b.closest(".modal").querySelector("#bkOut")).catch(e=>{console.error(e);toast("백업을 만들지 못했어요")});b.disabled=false;break;
     case "impBackup":importBackup(b.closest(".modal").querySelector("#bkOut"));break;

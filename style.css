@@ -387,3 +387,16 @@ body:not(.owner) [data-act=rmPerson]{display:none}
 .phe-hint{color:rgba(255,255,255,.75);font-size:12px;margin:0;text-align:center;max-width:420px}
 .ph .star~.by{top:24px}
 .lightbox.phedit{background:rgba(0,0,0,.94)}
+/* 카드 한 줄 감정 */
+.ev-moods{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 2px;font-size:13px;color:var(--ink)}
+.ev-moods span{min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ev-moods b{color:var(--muted);font-weight:600;margin-right:2px}
+.ev-moods .more{color:var(--muted)}
+/* 메뉴: 사진 모으기 · 고급 */
+.mhead{font-size:14px;margin-top:2px}
+details.adv{border:1px dashed var(--line);border-radius:12px;padding:6px 10px}
+details.adv summary{cursor:pointer;color:var(--muted);font-size:13px;font-weight:600;padding:4px 0}
+details.adv[open]{display:flex;flex-direction:column;gap:8px;padding-bottom:10px}
+.treatline{display:block;font-size:11px;color:var(--accent);font-family:var(--f-body);font-weight:600}
+label.treat{font-size:14px;padding:4px 0}
+.linkbtn{background:none;border:0;padding:4px 0;color:var(--accent);font-size:13px;font-weight:600;text-decoration:underline;align-self:flex-start;cursor:pointer}
