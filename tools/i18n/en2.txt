@@ -1,0 +1,48 @@
+0	{0} reactions
+1	Stop {0} (gas station, rest stop, etc.)
+2	Remove stop
+3	Visibility
+4	Done {0} · On hold {1}
+5	Day emoji
+6	Day title
+7	Theme of the day (e.g. Downtown walk)
+8	Show whose plans
+9	Delete item
+10	Rename {0}
+11	Remove {0}
+12	Name (e.g. Mom, Alex)
+13	Type
+14	Something to prepare
+15	View receipt
+16	Add receipt
+17	Currency symbol
+18	e.g. Our third trip · 1000 days together
+19	e.g. Hotel address
+20	Plan details
+21	Place name
+22	An exact address makes directions more accurate
+23	e.g. The best! Want to come back
+24	What you saw, ate and felt
+25	Remove photo
+26	Dish
+27	Price
+28	Delete line
+29	Korean, tacos…
+30	$$ or $20 per person
+31	5 min walk
+32	Wait time, reservation needed, etc.
+33	Store or item name
+34	Tip included, paid by card, etc.
+35	e.g. Me, Sam
+36	Mom, Dad
+37	e.g. November family cruise
+38	City or region
+39	What you were thankful for, moments you'll remember…
+40	The story of the day
+41	Auto (phone setting)
+42	-
+43	{0} color {1}
+44	{0} default color
+45	-
+46	photos/
+47	View larger

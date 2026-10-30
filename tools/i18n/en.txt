@@ -1,0 +1,562 @@
+0	-
+1	-
+2	-
+3	-
+4	-
+5	-
+6	-
+7	GoTripJ
+8	Plan together, remember together
+9	Planned
+10	Done
+11	Hold
+12	Stay
+13	Sights
+14	Food
+15	Travel
+16	Shopping
+17	Other
+18	Documents
+19	Bookings
+20	Packing
+21	Check passports & IDs
+22	Travel insurance
+23	Confirm flights
+24	Confirm hotel booking
+25	Car rental & transport
+26	Chargers & adapters
+27	Medicine kit
+28	Clothes & toiletries
+29	Local payment method
+30	Take a group photo before you leave
+31	Teal
+32	Ocean
+33	Sunset
+34	Forest
+35	Lavender
+36	Rose
+37	Ink
+38	Google Maps
+39	Apple Maps
+40	Couldn't save on this phone. Check your storage.
+41	Photo not found
+42	This isn't a zip file
+43	The file is damaged
+44	Unsupported compression format
+45	Share
+46	Save file
+47	Saved to Downloads (Files app)
+48	No permission. Please check the invite code.
+49	Today's free usage is used up. Syncing resumes tomorrow.
+50	Can't reach the server. We'll retry when you're connected.
+51	Couldn't save
+52	Trip
+53	⚠ Some changes didn't upload ({0}). Others may not see your latest edits. Close and reopen the app, then check again.
+54	⚠ Some changes haven't uploaded for over a minute. Your connection is weak or blocked. They're safely stored on this phone and will upload once you're connected.
+55	Offline · Your changes are saved on this phone and will upload when you're connected
+56	Uploading…
+57	Connecting…
+58	Synced with everyone
+59	OK
+60	Someone
+61	(reactions: {0})
+62	Add a place or address to get a navigation button.
+63	Start point and stops only carry over in Google Maps.
+64	🚗 Navigate with {0}
+65	Preview route
+66	🚗 Head to next stop · {0}{1}
+67	🗺 Route for the remaining {0} stops
+68	🔒 Only me
+69	👥 Shared
+70	Tap again to delete
+71	Everyone
+72	Not yet
+73	Today
+74	 days ago
+75	Easy planning
+76	Add stops day by day, or paste an itinerary you asked Claude to make and it fills in at once. Places you skip wait in the Hold box until you have time.
+77	A trip you share
+78	One invite link brings in family and friends. Edit the schedule, budget and checklist together, and give each person their own plans, like a kids' schedule. Works without internet, even at sea.
+79	Memories become a photo book
+80	Leave a photo and a line at each stop, and you'll get a photo book PDF after the trip. There's a Her·His couple book and a rolling paper too.
+81	+ New trip
+82	Join with code
+83	Try an example
+84	Restore backup
+85	No sign-up · No ads · Photos stay on your phone
+86	Privacy Policy
+87	Terms of Use
+88	Can't find this trip
+89	The person who created it deleted it, or the code changed. If you have a backup file on this phone, you can recreate it.
+90	Recreate from backup
+91	Remove from list
+92	One moment, please.
+93	You're offline. Trips you've never opened on this phone need an internet connection to load.
+94	Loading…
+95	 · Example
+96	{0} people
+97	👀 You joined as view-only. You can view the schedule and budget, and add your own notes, photos and reactions.
+98	Choose who uses this phone. Your name will appear on notes and expenses.
+99	Choose
+100	Prep
+101	Schedule
+102	Budget
+103	Journal
+104	Start
+105	End
+106	Spent
+107	Done
+108	Edit trip
+109	No trips
+110	View-only members can only rename themselves
+111	Rename
+112	Name
+113	The new name is visible to everyone. It also updates "Whose plan", notes and expenses.
+114	Cancel
+115	Save
+116	That name is already taken
+117	Name updated
+118	Right now (today {0})
+119	Back where it was (Day {0} {1})
+120	(today)
+121	The end time keeps the original length ({0} min).
+122	📅 When do you want to go?
+123	Date
+124	Start time
+125	Add to schedule
+126	Added to Day {0}{1}
+127	 · Today
+128	Hold box
+129	On hold {0}
+130	Nothing on hold.
+131	Hold box
+132	On hold
+133	Plans on hold leave the daily schedule and wait here. When you have time, pick one and tap
+134	📅 Add to schedule
+135	. It goes back on any day and time you choose.
+136	 · Spent {0}
+137	No plans for {0} on this day.
+138	+ Add a plan to this day{0}
+139	(me)
+140	View
+141	⏱ {0} same time · {1} plans
+142	Food {0}
+143	Photos {0}
+144	Notes {0}
+145	Untitled
+146	Not set
+147	✓ Done
+148	🚗 Go
+149	Details · Notes
+150	None yet.
+151	Roles · Transfer ownership
+152	Group photo
+153	Change photo
+154	+ Choose from gallery
+155	Add an item.
+156	Invite your travel companions
+157	Only people with the code can join
+158	Send invite link
+159	Copy code
+160	They open the link, install the app and pick their name.
+161	Who's going
+162	{0} people
+163	👑 Owner · 👀 View-only · No mark = Participant (can edit the schedule and budget)
+164	Tap a name to rename; tap ✕ twice to remove (owners only)
+165	Add
+166	This phone:
+167	Change
+168	Group photo before you leave
+169	Becomes the journal cover · Saved on this phone
+170	Prep checklist
+171	{0}/{1} done · Shared
+172	Receipt
+173	Another phone
+174	None
+175	No date
+176	Paid by {0}
+177	Edit
+178	over
+179	left
+180	Add expenses and they'll be grouped by category.
+181	Settled
+182	Gets back
+183	Owes
+184	Who paid
+185	{0} per person
+186	Assumes everyone splits evenly. Only expenses with a payer are counted.
+187	Snap the receipt and enter the amount, and everyone's spending is sorted by category and person. Receipt photos stay on the phone that took them.
+188	+ Add first expense
+189	Total budget
+190	Used
+191	By category
+192	{0} items · Shared
+193	Expenses
+194	+ Add expense
+195	Me
+196	+ Add cover photo
+197	With:
+198	Photos
+199	Edit my day entry
+200	Write my day entry
+201	Finished plans will show up here
+202	Mark plans as done and add notes and photos in the details screen, and they'll become a day-by-day journal. Shared notes also appear in everyone's journal.
+203	Finish your journal
+204	1) After the trip, each person goes to ⋯ → 'Send my photos' and sends the file to one person. 2) That person collects them with 'Merge photos'. 3) Upload the 'Export for journal' file to a Claude chat and say "Write our travel story."
+205	📖 Make a photo book
+206	Collect · Export photos
+207	all of us
+208	Places we went
+209	(continued)
+210	{0} notes{1}
+211	{0} messages
+212	{0} postcards
+213	{0} notes
+214	Our trip in numbers
+215	{0} days
+216	{0} places
+217	Places
+218	{0}
+219	Spent
+220	Who came
+221	Next time, for sure
+222	Made with GoTripJ
+223	No photos yet. Add photos from each plan's details.
+224	Right
+225	Left
+226	Design
+227	Classic
+228	Couple (Her · His)
+229	Each plan gets two columns: each person's own photos and their own line, side by side.
+230	Cover line (optional)
+231	Makes an 8×8 inch square photo book from the photos and notes of finished plans: cover → each day's opener → photo pages → closing page. Right now:
+232	{0} pages · {1} photos
+233	Only photos on this phone are included. To include others' photos, merge them first via ⋯ → 'Collect photos'.
+234	Quality
+235	For viewing & sharing (smaller file)
+236	For printing (high quality, uses original photos)
+237	File type
+238	One PDF file (view, or send to a print shop)
+239	One image per page (upload to Mixbook or Shutterfly, one per page, full bleed)
+240	Rolling paper style
+241	Name in the middle + notes around
+242	Speech bubbles
+243	Stamp postcards
+244	Letter cards + washi tape
+245	Sticky notes
+246	Add stickers to the rolling paper
+247	(picked from your trip emojis)
+248	Include notes (mood · diary)
+249	Include private notes too
+250	(turn off if it's a gift)
+251	Close
+252	Make
+253	Pick two different people for left and right.
+254	Making page {0} of {1}…
+255	Page {0} preview
+256	{0} pages · 8×8 in. When printing, choose '8×8 square, no margins'.
+257	{0} images. Create an 8×8 book and place one image per page with 'fill page' to get this exact layout.
+258	Couldn't make the photo book. Switch quality to 'For viewing & sharing' and try again.
+259	Whose plan is this?
+260	Tap to remove or add · Everyone can see it
+261	Start point
+262	Leave blank to start from your location
+263	Stops
+264	+ Add stop
+265	Destination
+266	Place
+267	Snap paid receipts and they're added to everyone's spending in the Budget tab.
+268	Find restaurants nearby on Google Maps
+269	Category
+270	Start
+271	End
+272	Address (for navigation)
+273	Memo (confirmation no., what to bring · shared)
+274	My notes
+275	One-line mood · rating
+276	Diary
+277	Saved on this phone
+278	Expenses for this plan
+279	+ Receipt · Expense
+280	Restaurants nearby
+281	Paste
+282	+ Add
+283	Duplicate
+284	Delete plan
+285	Reactions to my notes
+286	Others' notes
+287	+ From gallery
+288	No restaurants yet. Add one yourself, or paste a list Claude made for you.
+289	View on map
+290	Directions
+291	Edit restaurant
+292	Add restaurant
+293	Delete
+294	Cuisine
+295	Price range
+296	Rating
+297	Rating source
+298	Distance
+299	Address
+300	Menu · Prices
+301	+ Menu line
+302	Memo
+303	Restaurant saved
+304	Not set
+305	Edit expense
+306	Add expense
+307	The receipt photo is on {0}'s phone.
+308	Photos are saved only on this phone
+309	📷 Camera
+310	From album
+311	Description
+312	Amount ({0})
+313	Paid by
+314	Enter the amount as a number
+315	Expense saved
+316	New trip
+317	My name
+318	Travel companions (separate with commas, or add them when they join)
+319	If you shorten the dates, plans on removed days move to the Hold box. Changes are visible to everyone.
+320	Day tabs and a basic prep checklist are created for your dates, plus an invite code (up to 60 days).
+321	Delete for everyone
+322	Remove from this phone
+323	Trip name
+324	Destination
+325	Start date
+326	End date
+327	The end date can't be before the start date.
+328	Please enter your name.
+329	Trip created. Send the invite link from the Prep tab
+330	Invite code
+331	You need internet the first time you join.
+332	Join
+333	Please enter all 12 characters of the code.
+334	Checking…
+335	Couldn't find a trip with this code. Please check it again.
+336	Please try again once you're online.
+337	No one added yet.
+338	Who uses this phone?
+339	This name appears on your notes and expenses. You can change it later.
+340	Not on the list? Add my name
+341	Add & select
+342	Later
+343	You're set as {0}
+344	✉️ {0} notes are waiting for you
+345	 · {0} notes from others
+346	✓ Edit
+347	Write
+348	💌 Rolling paper
+349	Leave a note for each person. They're gathered on "To name" pages at the end of the photo book. Notes from others stay sealed until the photo book is made.
+350	A note to everyone on the trip.
+351	-
+352	-
+353	{0} Short is fine.
+354	Note saved
+355	{0} · My day entry
+356	-
+357	Paste what Claude made
+358	Paste the JSON you got from a Claude chat as is. Not sure of the format? Tap 'Copy request' and send it to Claude, and it'll reply in this format.
+359	Copy request
+360	Can't read this format. Paste just the JSON part again.
+361	That's a restaurant list. Paste it from the 'Paste' button in a plan's details.
+362	Added {0} restaurants
+363	This isn't a trip schedule format.
+364	Trip dates (start, end) are required.
+365	"{0}" {1} ~ {2} · {3} plans
+366	Add to current trip
+367	Create a new trip
+368	Added {0} plans
+369	 ({0} outside the trip dates skipped)
+370	This trip · {0}
+371	Send my photos (for collecting)
+372	Days to send
+373	All days
+374	Include original photos (saved to the recipient's gallery)
+375	Also send 'Only me' notes
+376	Clear stored originals
+377	Merge photos (add a received file)
+378	Export for journal
+379	Photo size
+380	Normal (1280px)
+381	Small (900px, saves space)
+382	Includes everyone's shared notes, your notes, and the photos and expenses on this phone. Upload it to a Claude chat and say "Write our travel story."
+383	Paste itinerary from Claude
+384	Install app on home screen
+385	Menu
+386	🎨 Look · Display · Navigation app
+387	This phone
+388	Checking storage…
+389	Back up this phone
+390	Saves photos, receipts, private notes and the list of trips you joined. Use 'Restore backup' when you switch phones. Last backup:
+391	Clear stored originals ({0} · {1})
+392	No stored originals
+393	 / available {0}
+394	Auto-delete protection on
+395	Auto-delete protection off: install the app on your home screen to turn it on
+396	{0} photos · using {1}{2} · {3}
+397	Trip color
+398	Visible to everyone on the trip
+399	Match phone
+400	Light
+401	Dark
+402	Normal
+403	Large
+404	Extra large
+405	Look
+406	Only changes on this phone
+407	Appearance
+408	Text size
+409	App for driving directions
+410	Category colors
+411	👑 Owner
+412	Participant
+413	👀 View-only
+414	Hasn't joined in the app yet
+415	Roles
+416	Owner: can delete the trip, change roles and remove people. You can have more than one.
+417	Participant: edits the schedule, budget and checklist together.
+418	View-only: can view the schedule and budget, and add their own notes, photos and reactions.
+419	To transfer ownership: make the other person 'Owner', then change your own role to 'Participant'.
+420	{0} emoji
+421	Shown on the day tab and journal · Visible to everyone
+422	Remove
+423	Making…
+424	Making… {0} photos
+425	No photos to send yet.
+426	 + cover
+427	 (incl. {0} originals)
+428	 + {0} notes
+429	{0} photos{1}{2}{3}.
+430	{0} photos whose originals were cleared were sent in the lighter version.
+431	The file is large. Send it via Google Drive, or split it by day.
+432	Send it to whoever is making the journal by text, email or Drive.
+433	All {0} originals handed over.
+434	📥 Save {0} originals to Photos ({1}–{2} / {3})
+435	In the share sheet, tap "Save Image". Saving {0} at a time.
+436	📥 Save {0} originals to gallery
+437	They're saved to Downloads and show up in your gallery's "Download" album. If asked to allow multiple downloads, tap Allow.
+438	Can't open the share sheet, so we'll save as downloads
+439	Saved to gallery (Download album)
+440	Reading {0}…
+441	This isn't a photo file from this app
+442	This file is from another trip ({0})
+443	 ({0} photos for plans that no longer exist skipped)
+444	 · {0} notes
+445	Merged {0} photos into the app{1}{2}.
+446	Making backup file…
+447	Keep a copy somewhere off your phone too, like Google Drive.
+448	Reading file…
+449	This isn't a backup file
+450	This isn't a backup from this app
+451	 · {0} backup
+452	{0} trips · {1} photos{2}
+453	Restore
+454	{0} trips were deleted from the server. You can recreate them from this backup.
+455	Recreate
+456	Restored.
+457	Recreated. The invite codes are the same.
+458	Backup restored
+459	Couldn't restore
+460	Making journal file…
+461	photos/00_cover.jpg
+462	- Destination: {0}
+463	- Dates: {0} ~ {1} ({2} days)
+464	- With: {0}
+465	- Exported by: {0}
+466	- Cover photo: {0}
+467	> A travel record exported from the GoTripJ app. Upload this zip to Claude and ask it to write your travel story. Each note shows who wrote it, and each photo shows who took it.
+468	 (one line: {0})
+469	- {0}'s note{1}{2}{3}
+470	(no plans)
+471	photos/D{0}_{1}_{2}_{3}.jpg
+472	(current location)
+473	- Route: {0}
+474	- Memo: {0}
+475	- Photos: {0}
+476	- Restaurant ideas:
+477	- Expenses:
+478	## Places on hold (didn't make it this time)
+479	## Spending summary
+480	 / budget {0}
+481	- Total spent: {0}{1}
+482	- Paid by {0}: {1}
+483	trip-info.md
+484	Preparing photos… {0}/{1}
+485	The file is large. If it's hard to upload, set photo size to 'Small' and try again.
+486	Upload this file to a Claude chat and say "Write our travel story."
+487	Trip removed from this phone
+488	Delete this trip for everyone?
+489	Deleting it removes the schedule, budget, checklist and shared notes
+490	from everyone's phones,
+491	-
+492	and it can't be undone.
+493	To just hide it on this phone, cancel and tap 'Remove from this phone'. You can rejoin anytime with the invite code. Back up from the ⋯ menu first if you might want it back.
+494	To confirm, type the trip name
+495	 exactly
+496	Deleting…
+497	Trip deleted
+498	You're invited to '{0}'.\nAndroid: open the link in Chrome, then ⋮ → Install app\niPhone: open the link in Safari, then Share → Add to Home Screen → open it from the home screen icon and enter the code under 'Join with code'\nInvite code: {1}
+499	Invite message copied
+500	Couldn't copy
+501	Code copied
+502	New plan
+503	Done! Next: {0}
+504	🚗 Go
+505	Done! Add notes and photos in the details
+506	Moved to the Hold box. Add it back anytime from there
+507	A trip needs at least one owner
+508	Tap again to hand over your ownership
+509	Ownership transferred
+510	Shared: others can see this note
+511	Only me: saved on this phone only
+512	Duplicated
+513	Deleted
+514	Saving…
+515	Couldn't save the photo. Check your storage.
+516	Cover photo saved
+517	Couldn't save the photo
+518	Only owners can remove people
+519	Remove?
+520	Couldn't save the receipt
+521	Copied. Send it to Claude along with the trip you want
+522	Couldn't make the file
+523	If you've finished sending, tap again
+524	Cleared {0} originals (the originals in your gallery are untouched)
+525	Couldn't make the backup
+526	Tap again: remove from this phone only
+527	Add trip
+528	Example · San Antonio weekend
+529	Friend
+530	Check IDs
+531	River Walk boat tickets
+532	Comfortable shoes
+533	Downtown walk
+534	Visit the Alamo
+535	Free entry; timed tickets for inside the church
+536	Lunch · Market Square
+537	Tex-Mex · Bakery
+538	Inside Market Square
+539	Example entry. Check and fill in the rating and prices yourself.
+540	Enchilada plate
+541	Check
+542	River Walk boat tour
+543	Prettiest at sunset
+544	The Pearl & the Missions
+545	Pearl Farmers Market
+546	Mission San José
+547	Gas (example)
+548	Hotel, 1 night (example)
+549	Setup needed
+550	App file missing
+551	Make sure firebase-bundle.js was uploaded too.
+552	Add your Firebase settings
+553	Paste your Firebase project values into firebase-config.js and upload it again. See README.txt.
+554	This browser can't store data. Please open it in Chrome or Safari.
+555	Turn on anonymous sign-in
+556	In the Firebase console → Authentication → Sign-in method, enable 'Anonymous'.
+557	Internet connection needed
+558	Open the app once while online. After that it works offline too.
+559	Check your Firebase settings
+560	Make sure the values in firebase-config.js match the Firebase console.
+561	Couldn't connect
