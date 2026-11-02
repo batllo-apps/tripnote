@@ -460,7 +460,25 @@ function evHTML(e,showDay){
 
 // Blurb 7×7 가격 (2026년 10월 공식 가격표 · 기본 20쪽 · Photo Book 배송 일반 $6.99 영업일 12일 ~ 우선 $24.99 5일 · PDF 업로드 $4.99)
 // 속지 규격: 재단 후 6.75×6.63in + 위·아래·바깥쪽 재단 여유 0.125in → 6.875×6.875in 정사각 (Blurb 계산기로 최종 확인 필요)
-const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월",inch:6.875,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)}};
+// Blurb 계산기 확인값(2026-11-02, Small Square · Softcover · Standard): 속지 PDF 6.875×6.875, 재단 6.75×6.625, 재단 여유 위·아래·바깥 0.125,
+// 안전 여백 위·아래·바깥 0.25 / 제본 쪽 0.5. 표지 PDF = 6.75×2 + 책등 + 0.25 (× 6.875). 책등: 20쪽 0.056, 60쪽 0.181 → 0.003125×쪽수 − 0.0065
+const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월",inch:6.875,trimW:6.75,gutter:.08,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)},
+  spine(n){return Math.max(0,Math.round((0.003125*n-0.0065)*1000)/1000)},coverW(n){return Math.round((this.trimW*2+this.spine(n)+0.25)*1000)/1000}};
+async function blobToCanvas(blob,W,H){const im=await createImageBitmap(blob);const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");return {c,x,im}}
+// 제본 쪽 안전 여백(0.5in)을 지키려고 내용을 제본 반대쪽으로 조금 밀어요. 비는 쪽은 가장자리 색으로 채워요.
+async function gutterShift(blob,S,dir){const G=Math.round(BLURB.gutter*300);const {c,x,im}=await blobToCanvas(blob,S,S);
+  if(dir>0){x.drawImage(im,0,0,S-G,S,G,0,S-G,S);x.drawImage(im,0,0,1,S,0,0,G,S)}else{x.drawImage(im,G,0,S-G,S,0,0,S-G,S);x.drawImage(im,S-1,0,1,S,S-G,0,G,S)}
+  im.close&&im.close();return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.92))}
+async function blurbCover(t,o,cover,n){const H=BLURB.px,Win=BLURB.coverW(n),W=Math.round(Win*300),sp=BLURB.spine(n);
+  const front=await pbDraw(t,{type:"cover"},H,o,cover);const {c,x,im}=await blobToCanvas(front,W,H);
+  const th=o.couple?["#B5527A","#FBEAF1"]:(THEMES[t.theme]||THEMES.teal).l;
+  x.fillStyle=th[1];x.fillRect(0,0,W,H);x.drawImage(im,W-H,0,H,H);im.close&&im.close();
+  const spX=Math.round((BLURB.trimW+0.125)*300),spW=Math.round(sp*300);if(spW>0){x.fillStyle=th[0];x.fillRect(spX,0,spW,H)}
+  const u=H/100,cx=Math.round((BLURB.trimW+0.125)*300/2+0.0625*300);x.textAlign="center";x.textBaseline="middle";
+  x.fillStyle=th[0];x.font=`800 ${Math.round(4.2*u)}px ${PB_FONT}`;x.fillText(EN()?"GoTripJ":"같이가J",cx,H*.42);
+  x.fillStyle="#5E6B73";x.font=`500 ${Math.round(2.6*u)}px ${PB_FONT}`;x.fillText(pbLines(x,t.name||"",H*.7,1)[0]||"",cx,H*.42+7*u);
+  x.font=`400 ${Math.round(2.2*u)}px ${PB_FONT}`;x.fillText(EN()?"Made with GoTripJ · gotripj":"같이가J로 만든 여행 사진첩",cx,H-0.375*300-2*u);
+  const blob=await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.92));return {blob,w:W,h:H,pw:Math.round(Win*72*1000)/1000,ph:BLURB.pt,Win,sp}}
 function blurbPages(pl){const body=pl.filter(p=>p.type!=="cover");const end=body.length&&body[body.length-1].type==="end"?body.pop():null;
   let n=body.length+(end?1:0);while(n<BLURB.base){body.push({type:"memo"});n++}if(end)body.push(end);
   if(body.length%2)body.push({type:"blank"});return body}
@@ -469,7 +487,7 @@ function printHelpHTML(fmt,pages){if(!bookOn())return "";const n=Math.max(BLURB.
   const price=`<p class="hint">이 사진첩(${pages}쪽) 예상 가격: 소프트커버 약 $${soft} · 하드커버 약 $${hard} + PDF 업로드 $${BLURB.pdf} + 배송 $${BLURB.ship}부터. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)</p>`;
   const disc=`<p class="hint">${hasAff()?"제휴 링크예요. 이 링크로 주문하면 같이가J가 수수료를 받을 수 있어요. 가격은 똑같아요.":"인쇄 회사 사이트로 바로 연결돼요. 같이가J는 이 링크로 돈을 받지 않아요."}</p>`;
   if(fmt==="blurb")return `<div class="printhelp"><b>🖨 Blurb에서 책으로 만들기</b>
-    <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb 열기</span><small>Photo Book → Small Square(7×7) → PDF로 만들기(PDF to Book)를 고르고, 이 파일을 속지(interior)로 올려요. 표지 파일은 다음 업데이트에서 만들어 드려요. 컴퓨터나 폰 크롬에서 해요(Blurb 앱은 PDF 업로드가 안 돼요).</small></a>${price}${disc}</div>`;
+    <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb 열기</span><small>PDF로 만들기(PDF to Book) → Photo Book → Small Square → <b>Softcover · Standard</b>를 고르고, ①을 속지(interior), ②를 표지(cover)로 올려요. 쪽수는 ①의 쪽수와 같게 넣어요. 컴퓨터나 폰 크롬에서 해요(Blurb 앱은 PDF 업로드가 안 돼요).</small></a>${price}${disc}</div>`;
   if(fmt==="jpg")return `<div class="printhelp"><b>🖨 8×8 사진첩으로 인쇄하기</b>
     <a href="${bkURL("print",{to:"shutterfly"})}" target="_blank" rel="noopener"><span>Shutterfly</span><small>8×8 사진첩을 고르고, 받은 페이지 사진을 한 쪽에 한 장씩 '꽉 채우기'로 넣어요. 크기가 딱 맞아 잘리지 않아요.</small></a>
     <a href="${bkURL("print",{to:"snapfish"})}" target="_blank" rel="noopener"><span>Snapfish</span><small>8×8 사진첩에 같은 방법으로 넣어요. 할인 행사가 잦아요.</small></a>
@@ -851,8 +869,8 @@ async function pdfFromJpegs(list,pt){const parts=[],offs=[];let off=0;
   push("%PDF-1.4\n%\xE2\xE3\xCF\xD3\n");const N=2+list.length*3;
   offs[1]=off;push("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
   offs[2]=off;push(`2 0 obj\n<< /Type /Pages /Count ${list.length} /Kids [${list.map((_,i)=>`${3+i*3} 0 R`).join(" ")}] >>\nendobj\n`);
-  list.forEach((p,i)=>{const a=3+i*3,cs=`q ${pt} 0 0 ${pt} 0 0 cm /Im0 Do Q`;
-    offs[a]=off;push(`${a} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pt} ${pt}] /Resources << /XObject << /Im0 ${a+2} 0 R >> >> /Contents ${a+1} 0 R >>\nendobj\n`);
+  list.forEach((p,i)=>{const a=3+i*3,pw=p.pw||pt,ph=p.ph||pt,cs=`q ${pw} 0 0 ${ph} 0 0 cm /Im0 Do Q`;
+    offs[a]=off;push(`${a} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pw} ${ph}] /Resources << /XObject << /Im0 ${a+2} 0 R >> >> /Contents ${a+1} 0 R >>\nendobj\n`);
     offs[a+1]=off;push(`${a+1} 0 obj\n<< /Length ${cs.length} >>\nstream\n${cs}\nendstream\nendobj\n`);
     offs[a+2]=off;push(`${a+2} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${p.w} /Height ${p.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${p.blob.size} >>\nstream\n`);push(p.blob);push("\nendstream\nendobj\n")});
   const x0=off;push(`xref\n0 ${N+1}\n0000000000 65535 f \n`+Array.from({length:N},(_,k)=>String(offs[k+1]).padStart(10,"0")+" 00000 n \n").join(""));
@@ -864,7 +882,7 @@ function photobookModal(){const t=T;if(!t)return;
     <p class="hint">완료한 일정의 사진과 기록으로 8×8 인치 정사각 사진첩을 만들어요. 표지 → 날짜별 첫 장 → 사진 페이지 → 마무리 순서예요. 지금 기준 <b>${pages.length}쪽 · 사진 ${nPh}장</b>.${nPh?"":" 아직 사진이 없어요. 일정 상세에서 사진을 넣어 주세요."}</p>
     <p class="hint">이 폰에 있는 사진만 들어가요. 다른 사람 사진까지 넣으려면 먼저 ⋯ → '사진 모으기'로 합쳐 주세요.</p>
     <div class="field"><label for="pb-q">화질</label><select class="inp" id="pb-q"><option value="1600">보기·공유용 (가벼움)</option><option value="2400">인쇄용 (고화질, 원본 사진 사용)</option></select></div>
-    <div class="field"><label for="pb-f">파일 형태</label><select class="inp" id="pb-f"><option value="blurb">Blurb 인쇄용 (7×7 속지 PDF)</option><option value="pdf">PDF 한 파일 (보기, 인쇄소 맡기기)</option><option value="jpg">페이지별 사진 묶음 (Mixbook·Shutterfly에 한 장씩 꽉 차게 올리기)</option></select></div>
+    <div class="field"><label for="pb-f">파일 형태</label><select class="inp" id="pb-f"><option value="blurb">Blurb 인쇄용 (7×7 소프트커버 · 속지 + 표지 PDF)</option><option value="pdf">PDF 한 파일 (보기, 인쇄소 맡기기)</option><option value="jpg">페이지별 사진 묶음 (Mixbook·Shutterfly에 한 장씩 꽉 차게 올리기)</option></select></div>
     ${t.people.length>=2?`<div class="field"><label for="pb-d">디자인</label><select class="inp" id="pb-d"><option value="basic">기본</option><option value="couple">커플 (Her · His)</option></select></div>
     <div id="pbCpl" hidden><p class="hint">일정마다 두 칸으로 나눠, 각자 찍은 사진과 각자 쓴 한 줄을 나란히 넣어요.</p>
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
@@ -890,10 +908,15 @@ function photobookModal(){const t=T;if(!t)return;
   m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut");
     const fmt=m.querySelector("#pb-f").value,S=fmt==="blurb"?BLURB.px:+m.querySelector("#pb-q").value;const o=readO(out);if(!o){b.disabled=false;return}o.orig=S>2000;
     try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
-      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;const blob=await pbDraw(t,pl[k],S,o,cover);res.push({blob,w:S,h:S})}
+      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;let blob=await pbDraw(t,pl[k],S,o,cover);if(fmt==="blurb")blob=await gutterShift(blob,S,k%2===0?1:-1);res.push({blob,w:S,h:S})}
+      let bc=null;if(fmt==="blurb"){out.textContent=EN()?"Making the cover…":"표지 만드는 중…";bc=await blurbCover(t,o,cover,pl.length)}
       cover&&cover.close&&cover.close();const day=t.start||todayISO();
-      if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const nMemo=pl.filter(p=>p.type==="memo").length,blank=pl.some(p=>p.type==="blank");
-        offerFile(out,pdf,`gotripj-blurb-interior-${day}.pdf`,EN()?`Blurb interior · ${pl.length} pages · 7×7 square (with bleed).`+(nMemo?` Added ${nMemo} memo pages to reach the 20-page minimum.`:"")+(blank?" Added 1 blank page at the end to make the page count even.":""):`Blurb 속지 ${pl.length}쪽 · 7×7 정사각(재단 여유분 포함).`+(nMemo?` 최소 20쪽을 채우려고 메모 페이지 ${nMemo}쪽을 넣었어요.`:"")+(blank?" 쪽수를 짝수로 맞추려고 맨 뒤에 빈 페이지 1쪽을 넣었어요.":""));out.insertAdjacentHTML("beforeend",printHelpHTML("blurb",pl.length))}
+      if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const cpdf=await pdfFromJpegs([bc],BLURB.pt);
+        const nMemo=pl.filter(p=>p.type==="memo").length,blank=pl.some(p=>p.type==="blank");
+        out.innerHTML=`<div class="bf1"></div><div class="bf2"></div>`;
+        offerFile(out.querySelector(".bf1"),pdf,`gotripj-blurb-interior-${day}.pdf`,EN()?`① Interior · ${pl.length} pages · 6.875×6.875 in (with bleed).`+(nMemo?` Added ${nMemo} memo pages to reach the 20-page minimum.`:"")+(blank?" Added 1 blank page at the end to make the page count even.":""):`① 속지 ${pl.length}쪽 · 6.875×6.875인치(재단 여유 포함).`+(nMemo?` 최소 20쪽을 채우려고 메모 페이지 ${nMemo}쪽을 넣었어요.`:"")+(blank?" 쪽수를 짝수로 맞추려고 맨 뒤에 빈 페이지 1쪽을 넣었어요.":""));
+        offerFile(out.querySelector(".bf2"),cpdf,`gotripj-blurb-cover-${day}.pdf`,EN()?`② Cover · ${bc.Win} × 6.875 in (spine ${bc.sp} in). Softcover · Standard paper only.`:`② 표지 ${bc.Win} × 6.875인치 (책등 ${bc.sp}인치). 소프트커버 · 기본 용지 전용이에요.`);
+        out.insertAdjacentHTML("beforeend",printHelpHTML("blurb",pl.length))}
       else if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("pdf",pl.length))}
       else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("jpg",pl.length))}
     }catch(e){console.error(e);out.textContent="사진첩을 만들지 못했어요. 화질을 '보기·공유용'으로 바꿔 다시 해 보세요."}
