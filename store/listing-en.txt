@@ -37,7 +37,7 @@ GoTripJ is a group trip planner for families, friends and couples, made for the 
 · Photos and private notes stay on your phone
 
 [Category] Travel & Local
-[Contact email] (app email)
+[Contact email] gotripj.app@gmail.com
 [Privacy policy URL] https://batllo-apps.github.io/tripnote/privacy.html#en
 
 [Search phrases this listing should cover]
