@@ -117,6 +117,9 @@ function pickFiles(multiple,capture,accept){return new Promise(res=>{const i=doc
 const photosOf=evId=>(L&&L.photos[evId])||[];
 
 /* ================= jpg 메타 (사진 파일 안에 일정 정보 숨기기) ================= */
+// 사진·zip 안에는 초대코드 대신 "여행 표시값"(코드를 바꾼 값)만 넣어요. 같은 여행인지 맞춰 볼 수는 있지만, 거꾸로 코드를 알아낼 수는 없어요(보안 점검 3번, 2026-11-02)
+async function tripTag(tid){const t=new TextEncoder().encode("gotripj-trip:"+tid);try{const h=new Uint8Array(await crypto.subtle.digest("SHA-256",t));return Array.from(h.subarray(0,12),x=>x.toString(16).padStart(2,"0")).join("")}catch(e){let a=0x811c9dc5,b=0x01000193;for(const x of t){a=Math.imul(a^x,16777619)>>>0;b=Math.imul(b^x,2246822519)>>>0}return "f"+a.toString(16)+b.toString(16)}}
+async function sameTrip(m){if(m.tt)return m.tt===await tripTag(curId);if(m.tid)return m.tid===curId;return true}
 // JPEG 주석(COM, FFFE) 구간에 "GTJ1"+JSON을 넣어요. 퀵쉐어·에어드롭은 파일을 그대로 옮기니 같이 따라가요.
 async function jpgWithMeta(blob,meta){const b=new Uint8Array(await blob.arrayBuffer());if(b[0]!==0xFF||b[1]!==0xD8)return blob;
   const pay=enc.encode("GTJ1"+JSON.stringify(meta));if(pay.length>65000)return blob;const len=pay.length+2;
@@ -462,23 +465,25 @@ function evHTML(e,showDay){
 // 속지 규격: 재단 후 6.75×6.63in + 위·아래·바깥쪽 재단 여유 0.125in → 6.875×6.875in 정사각 (Blurb 계산기로 최종 확인 필요)
 // Blurb 계산기 확인값(2026-11-02, Small Square · Softcover · Standard): 속지 PDF 6.875×6.875, 재단 6.75×6.625, 재단 여유 위·아래·바깥 0.125,
 // 안전 여백 위·아래·바깥 0.25 / 제본 쪽 0.5. 표지 PDF = 6.75×2 + 책등 + 0.25 (× 6.875). 책등: 20쪽 0.056, 60쪽 0.181 → 0.003125×쪽수 − 0.0065
-const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월",inch:6.875,trimW:6.75,gutter:.08,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)},
-  spine(n){return Math.max(0,Math.round((0.003125*n-0.0065)*1000)/1000)},coverW(n){return Math.round((this.trimW*2+this.spine(n)+0.25)*1000)/1000}};
+const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월",inch:6.875,trimW:6.75,gutter:.0625,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)},
+  // 책등은 쪽수에 따라 계단처럼 바뀌어요(20~28쪽 0.056, 30~56쪽 0.125, 58~60쪽 0.181 — 공식으로는 안 맞음). 계산기에서 확인한 값만 씀(2026-11-02 20~60쪽 전부 확인)
+  known:(()=>{const k={};for(let n=20;n<=60;n+=2)k[n]=n<=28?.056:n<=56?.125:.181;return k})(),
+  spine(n){const k=this.known[n];if(k!=null)return k;const v=(prefs.spines||{})[n];return v!=null?+v:null},coverW(n,sp){return Math.round((this.trimW*2+sp+0.25)*1000)/1000}};
 async function blobToCanvas(blob,W,H){const im=await createImageBitmap(blob);const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");return {c,x,im}}
 // 제본 쪽 안전 여백(0.5in)을 지키려고 내용을 제본 반대쪽으로 조금 밀어요. 비는 쪽은 가장자리 색으로 채워요.
-async function gutterShift(blob,S,dir){const G=Math.round(BLURB.gutter*300);const {c,x,im}=await blobToCanvas(blob,S,S);
+async function gutterShift(blob,S,dir){const G=Math.round(BLURB.gutter/BLURB.inch*S);const {c,x,im}=await blobToCanvas(blob,S,S);
   if(dir>0){x.drawImage(im,0,0,S-G,S,G,0,S-G,S);x.drawImage(im,0,0,1,S,0,0,G,S)}else{x.drawImage(im,G,0,S-G,S,0,0,S-G,S);x.drawImage(im,S-1,0,1,S,S-G,0,G,S)}
-  im.close&&im.close();return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.92))}
-async function blurbCover(t,o,cover,n){const H=BLURB.px,Win=BLURB.coverW(n),W=Math.round(Win*300),sp=BLURB.spine(n);
+  im.close&&im.close();return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.95))}
+async function blurbCover(t,o,cover,n,sp){const H=BLURB.px,Win=BLURB.coverW(n,sp),W=Math.round(Win*300);
   const front=await pbDraw(t,{type:"cover"},H,o,cover);const {c,x,im}=await blobToCanvas(front,W,H);
   const th=o.couple?["#B5527A","#FBEAF1"]:(THEMES[t.theme]||THEMES.teal).l;
   x.fillStyle=th[1];x.fillRect(0,0,W,H);x.drawImage(im,W-H,0,H,H);im.close&&im.close();
-  const spX=Math.round((BLURB.trimW+0.125)*300),spW=Math.round(sp*300);if(spW>0){x.fillStyle=th[0];x.fillRect(spX,0,spW,H)}
+  const spX=Math.round((BLURB.trimW+0.125)*300),spW=Math.round(sp*300);if(spW>0&&sp>=.25){x.fillStyle=th[0];x.fillRect(spX,0,spW,H)} // 얇은 책등(0.25in 미만)은 재단 오차보다 좁아서 색을 칠하지 않아요
   const u=H/100,cx=Math.round((BLURB.trimW+0.125)*300/2+0.0625*300);x.textAlign="center";x.textBaseline="middle";
   x.fillStyle=th[0];x.font=`800 ${Math.round(4.2*u)}px ${PB_FONT}`;x.fillText(EN()?"GoTripJ":"같이가J",cx,H*.42);
   x.fillStyle="#5E6B73";x.font=`500 ${Math.round(2.6*u)}px ${PB_FONT}`;x.fillText(pbLines(x,t.name||"",H*.7,1)[0]||"",cx,H*.42+7*u);
-  x.font=`400 ${Math.round(2.2*u)}px ${PB_FONT}`;x.fillText(EN()?"Made with GoTripJ · gotripj":"같이가J로 만든 여행 사진첩",cx,H-0.375*300-2*u);
-  const blob=await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.92));return {blob,w:W,h:H,pw:Math.round(Win*72*1000)/1000,ph:BLURB.pt,Win,sp}}
+  x.font=`400 ${Math.round(2.2*u)}px ${PB_FONT}`;x.fillText(EN()?"A travel photo book made with GoTripJ":"같이가J로 만든 여행 사진첩",cx,H*.42+14*u); // 뒤표지 아래쪽은 Blurb 로고 자리라 비워 둬요
+  const blob=await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.95));return {blob,w:W,h:H,pw:Math.round(Win*72*1000)/1000,ph:BLURB.pt,Win,sp}}
 function blurbPages(pl){const body=pl.filter(p=>p.type!=="cover");const end=body.length&&body[body.length-1].type==="end"?body.pop():null;
   let n=body.length+(end?1:0);while(n<BLURB.base){body.push({type:"memo"});n++}if(end)body.push(end);
   if(body.length%2)body.push({type:"blank"});return body}
@@ -659,7 +664,8 @@ function stickerSet(t,o){
   else if(/캠핑|camp|산|mountain|hike|하이킹/.test(s))base=["⛺","🌲","🏔️","🔥","🌙","⭐","🍂","🥾"];
   if(o.couple)base=["💕","💌","🌹","✨","🥂","💗",...base.slice(0,3)];
   return [...new Set([...day,...base])]}
-function placeStickers(x,S,occ,set,seed,count){const u=S/100,m=S*.05,rnd=prng(seed),put=[];
+let PB_BLURB=false; // Blurb 인쇄용으로 그릴 때 안전 여백(재단선에서 0.25in, 제본 쪽 0.5in) 안으로 당겨요
+function placeStickers(x,S,occ,set,seed,count){const u=S/100,m=S*(PB_BLURB?.1:.05),rnd=prng(seed),put=[];
   const hit=(r,p)=>occ.concat(put).some(o=>r.x<o.x+o.w+p&&r.x+r.w+p>o.x&&r.y<o.y+o.h+p&&r.y+r.h+p>o.y);
   for(let tries=0;tries<220&&put.length<count;tries++){const sz=(6.5+rnd()*4)*u;const r={x:m+rnd()*(S-2*m-sz),y:m+rnd()*(S-2*m-sz),w:sz,h:sz};
     if(hit(r,2*u))continue;put.push(r);const ch=set[Math.floor(rnd()*set.length)];const c=stickerCanvas(ch,Math.round(sz));
@@ -734,7 +740,7 @@ async function pbDraw(t,pg,S,o,cover){
           const line=e.title+(n&&n.mood?`  — ${n.mood}`:"");x.fillText(pbLines(x,line,S-2*m-12*u,1)[0]||"",m+12*u,y);y+=5*u}}
     }
   }else if(pg.type==="ring"){
-    x.fillStyle="#FFFAF1";x.fillRect(0,0,S,S);x.strokeStyle=acc;x.globalAlpha=.25;x.setLineDash([.8*u,1.2*u]);x.lineWidth=.35*u;rrect(x,m*.5,m*.5,S-m,S-m,3*u);x.stroke();x.setLineDash([]);x.globalAlpha=1;
+    x.fillStyle="#FFFAF1";x.fillRect(0,0,S,S);x.strokeStyle=acc;x.globalAlpha=.25;x.setLineDash([.8*u,1.2*u]);x.lineWidth=.35*u;{const bi=PB_BLURB?m*.95:m*.5;rrect(x,bi,bi,S-2*bi,S-2*bi,3*u)}x.stroke();x.setLineDash([]);x.globalAlpha=1;
     const cx=S/2,cy=S/2,R0=13*u;x.fillStyle=soft;x.beginPath();x.arc(cx,cy,R0,0,Math.PI*2);x.fill();
     x.strokeStyle=acc;x.globalAlpha=.5;x.setLineDash([.6*u,.9*u]);x.lineWidth=.3*u;x.beginPath();x.arc(cx,cy,R0+1.6*u,0,Math.PI*2);x.stroke();x.setLineDash([]);x.globalAlpha=1;
     x.textAlign="center";x.fillStyle=acc;x.font=`italic 400 ${Math.round(3.4*u)}px ${SERIF}`;x.fillText("To",cx,cy-9*u);
@@ -745,7 +751,7 @@ async function pbDraw(t,pg,S,o,cover){
     const n=pg.list.length,sc=n<=2?1.4:n<=4?1.2:1,nw=(n<=2?60:n<=4?34:30)*u,su=u*sc;
     pg.list.forEach((it,k)=>{const th=n===1?Math.PI/2:-Math.PI/2+k*2*Math.PI/n;
       x.font=`500 ${Math.round(3*su)}px ${PB_FONT}`;const ln=pbLines(x,it.text,nw,7);const lh=4.4*su,h=ln.length*lh+4.4*su;
-      const rx=Math.max(0,S/2-m*.9-nw/2),ry=S/2-m*.9-h/2;const px=cx+rx*Math.cos(th),py=cy+ry*Math.sin(th);
+      const rm=PB_BLURB?m*1.3:m*.9,rx=Math.max(0,S/2-rm-nw/2),ry=S/2-rm-h/2;const px=cx+rx*Math.cos(th),py=cy+ry*Math.sin(th);
       const lw=Math.max(...ln.map(l=>x.measureText(l).width));occ.push({x:px-lw/2-1*u,y:py-h/2-1*u,w:lw+2*u,h:h+2*u});
       x.save();x.translate(px,py);x.rotate(((k*37)%9-4)*.01);x.fillStyle=RING_INK[k%RING_INK.length];pbText(x,ln,0,-h/2,lh);
       x.font=`italic 400 ${Math.round(2.8*su)}px ${SERIF}`;x.globalAlpha=.85;x.fillText("— "+it.fromL,0,-h/2+ln.length*lh+1*su);x.globalAlpha=1;x.restore()});
@@ -825,7 +831,7 @@ async function pbDraw(t,pg,S,o,cover){
   }else if(pg.type==="memo"){
     x.fillStyle=acc;F(2.6,700);x.fillText(EN()?"NOTES":"메모",m,m*1.1);
     x.strokeStyle="rgba(0,0,0,.12)";x.lineWidth=Math.max(1,.18*u);for(let y=m*1.1+9*u;y<S-m*1.2;y+=7.5*u){x.beginPath();x.moveTo(m,y);x.lineTo(S-m,y);x.stroke()}
-    x.fillStyle=mut;F(2.2,500);x.fillText(EN()?"GoTripJ":"같이가J",m,S-m*.9)
+    x.fillStyle=mut;F(2.2,500);x.fillText(EN()?"GoTripJ":"같이가J",m,PB_BLURB?S-m*1.45:S-m*.9)
   }else if(pg.type==="photos"){
     const capH=o.text&&!pg.cont?S*.2:S*.13;const W=S-2*m,H=S-m-capH-m*.4;const gap=Math.round(1.2*u);
     const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
@@ -851,7 +857,7 @@ async function pbDraw(t,pg,S,o,cover){
     x.fillStyle=ink;F(4,800);x.fillText(pbLines(x,e.title+(pg.cont?CONT():""),W,1)[0],m,y);y+=5.6*u;
     if(o.text&&!pg.cont){const w=withNames(t,e);const sub=[e.place,w&&w!=="모두"?(EN()?"With: ":"함께: ")+w:""].filter(Boolean).join("  ·  ");
       if(sub){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,sub,W,1)[0],m,y);y+=4.4*u}
-      const n=pg.notes[0];if(n){x.fillStyle=ink;F(3,400);pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join(" — "),W,Math.max(1,Math.floor((S-m*.6-y)/(4.4*u)))),m,y,4.4*u)}}
+      const n=pg.notes[0];if(n){x.fillStyle=ink;F(3,400);pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join(" — "),W,Math.max(1,Math.floor(((PB_BLURB?S-m*1.15:S-m*.6)-y)/(4.4*u)))),m,y,4.4*u)}}
   }else{
     x.fillStyle=soft;x.fillRect(0,0,S,S);let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText(tt("함께한 시간"),m,y);y+=8*u;
     const done=t.events.filter(e=>e.status==="done"&&e.cat!=="move").length;const stats=EN()?[[`${t.days.length}`,"Days"],[`${done}`,"Places"],[`${pg.nPh}`,"Photos"]]:[[`${t.days.length}일`,"여행"],[`${done}곳`,"다닌 곳"],[`${pg.nPh}장`,"사진"]];
@@ -861,8 +867,8 @@ async function pbDraw(t,pg,S,o,cover){
     const held=t.events.filter(e=>e.status==="hold");
     if(held.length){x.fillStyle=mut;F(2.8,700);x.fillText(tt("다음에 꼭 갈 곳"),m,y);y+=4.6*u;x.fillStyle=ink;F(3.2,500);
       for(const e of held.slice(0,8)){x.fillText("· "+pbLines(x,e.title,S-2*m-4*u,1)[0],m,y);y+=4.8*u}}
-    if(o.couple){x.fillStyle=acc;x.font=`italic 400 ${Math.round(5*u)}px ${SERIF}`;x.fillText(`${o.couple.a.label} & ${o.couple.b.label}`,m,S-m-9*u)}
-    x.fillStyle=mut;F(2.4,500);x.fillText(EN()?"Made with GoTripJ":"같이가J로 만든 사진첩",m,S-m)}
+    if(o.couple){x.fillStyle=acc;x.font=`italic 400 ${Math.round(5*u)}px ${SERIF}`;x.fillText(`${o.couple.a.label} & ${o.couple.b.label}`,m,(PB_BLURB?S-m*1.45:S-m)-9*u)}
+    x.fillStyle=mut;F(2.4,500);x.fillText(EN()?"Made with GoTripJ":"같이가J로 만든 사진첩",m,PB_BLURB?S-m*1.45:S-m)}
   return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.9))}
 async function pdfFromJpegs(list,pt){const parts=[],offs=[];let off=0;
   const push=b=>{if(typeof b==="string")b=enc.encode(b);parts.push(b);off+=b instanceof Blob?b.size:b.byteLength};
@@ -888,6 +894,8 @@ function photobookModal(){const t=T;if(!t)return;
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
       <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div></div>`:""}
     <div class="field"><label for="pb-r">롤링페이퍼 모양</label><select class="inp" id="pb-r"><option value="ring">가운데 이름 + 둘레 쪽지</option><option value="bubble">말풍선 메시지</option><option value="stamp">우표 엽서</option><option value="card">편지 카드 + 마스킹테이프</option><option value="note">포스트잇</option></select></div>
+    <div class="field" id="pbSpineBox" hidden><label for="pb-spine">책등 두께 (인치) <span class="hint" id="pbSpineInfo"></span></label><input class="inp mono" id="pb-spine" inputmode="decimal" placeholder="예: 0.056" style="max-width:140px">
+      <p class="hint" id="pbSpineHelp"></p></div>
     <div class="field"><label for="pb-1">사진 한 장 페이지</label><select class="inp" id="pb-1"><option value="pola">폴라로이드 + 스티커</option><option value="full">꽉 채우기</option></select></div>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-s" checked> 스티커 붙이기 <span class="hint">(롤링페이퍼 · 폴라로이드, 여행 이모지로 자동)</span></label>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-t" checked> 기록(한 줄 감정 · 일기) 넣기</label>
@@ -899,23 +907,34 @@ function photobookModal(){const t=T;if(!t)return;
       o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";return null}}
     return o};
   m.querySelector("#pbPv").onclick=async ev=>{const b=ev.currentTarget;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");const o=readO(out);if(!o)return;b.disabled=true;prev.innerHTML="";
-    try{flushAll();const pl=pbPlan(t,o);const cover=L.cover?await pbImage(L.cover,false):null;
-      for(let k=0;k<pl.length;k++){out.textContent=`미리보기 ${k+1} / ${pl.length}쪽…`;const blob=await pbDraw(t,pl[k],560,o,cover);const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽`;
+    const bl=m.querySelector("#pb-f").value==="blurb";
+    try{flushAll();let pl=pbPlan(t,o);if(bl)pl=blurbPages(pl);const cover=L.cover?await pbImage(L.cover,false):null;PB_BLURB=bl;
+      for(let k=0;k<pl.length;k++){out.textContent=`미리보기 ${k+1} / ${pl.length}쪽…`;let blob=await pbDraw(t,pl[k],560,o,cover);if(bl)blob=await gutterShift(blob,560,k%2===0?1:-1);const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽`;
         im.onclick=()=>{const l=document.createElement("div");l.className="lightbox";l.innerHTML=`<img src="${im.src}" alt="${k+1}쪽 크게 보기">`;l.onclick=()=>l.remove();document.body.appendChild(l)};prev.appendChild(im)}
-      cover&&cover.close&&cover.close();out.textContent=`${pl.length}쪽 미리보기예요. 눌러서 크게 볼 수 있어요. 옵션을 바꾸고 다시 눌러 보세요.`}
-    catch(e){console.error(e);out.textContent="미리보기를 만들지 못했어요."}b.disabled=false};
+      PB_BLURB=false;cover&&cover.close&&cover.close();out.textContent=`${pl.length}쪽 미리보기예요. 눌러서 크게 볼 수 있어요. 옵션을 바꾸고 다시 눌러 보세요.`}
+    catch(e){PB_BLURB=false;console.error(e);out.textContent="미리보기를 만들지 못했어요."}b.disabled=false};
+  const spineUpd=()=>{const box=m.querySelector("#pbSpineBox");const on=m.querySelector("#pb-f").value==="blurb";box.hidden=!on;if(!on)return;
+    const o0=(typeof readO==="function"&&readO({textContent:""}))||{text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:true,single:"pola"};
+    const n=blurbPages(pbPlan(t,o0)).length;m._bn=n;const v=BLURB.spine(n);const inp=m.querySelector("#pb-spine");
+    m.querySelector("#pbSpineInfo").textContent=EN()?`· this book: ${n} pages`:`· 이 책: ${n}쪽`;
+    if(v!=null&&(!inp.dataset.n||inp.dataset.n!=String(n)||!inp.value))inp.value=v;inp.dataset.n=n;
+    m.querySelector("#pbSpineHelp").innerHTML=BLURB.known[n]!=null?(EN()?"Checked value — you can leave it.":"확인된 값이에요. 그대로 두면 돼요."):(EN()?`Open <a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb's calculator</a>, pick Small Square · Softcover · Standard · ${n} pages, and enter the "Gutter / Spine" width. Without it, only the interior PDF is made.`:`<a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb 계산기</a>에서 Small Square · Softcover · Standard · ${n}쪽을 넣고, "Gutter / Spine"의 앞 숫자를 적어 주세요. 비워 두면 속지만 만들어요.`)};
+  ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});setTimeout(spineUpd,0);
   const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
   m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut");
     const fmt=m.querySelector("#pb-f").value,S=fmt==="blurb"?BLURB.px:+m.querySelector("#pb-q").value;const o=readO(out);if(!o){b.disabled=false;return}o.orig=S>2000;
     try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
-      for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;let blob=await pbDraw(t,pl[k],S,o,cover);if(fmt==="blurb")blob=await gutterShift(blob,S,k%2===0?1:-1);res.push({blob,w:S,h:S})}
-      let bc=null;if(fmt==="blurb"){out.textContent=EN()?"Making the cover…":"표지 만드는 중…";bc=await blurbCover(t,o,cover,pl.length)}
+      PB_BLURB=fmt==="blurb";
+      try{for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;let blob=await pbDraw(t,pl[k],S,o,cover);if(fmt==="blurb")blob=await gutterShift(blob,S,k%2===0?1:-1);res.push({blob,w:S,h:S})}}finally{PB_BLURB=false}
+      let bc=null;if(fmt==="blurb"){const si=m.querySelector("#pb-spine");const sv=si.dataset.n===String(pl.length)?parseFloat(si.value):BLURB.spine(pl.length);
+        if(sv>0&&sv<3){if(BLURB.known[pl.length]==null){prefs.spines=Object.assign(prefs.spines||{},{[pl.length]:sv});savePrefs()}
+          out.textContent=EN()?"Making the cover…":"표지 만드는 중…";PB_BLURB=true;try{bc=await blurbCover(t,o,cover,pl.length,sv);bc.sp=sv}finally{PB_BLURB=false}}}
       cover&&cover.close&&cover.close();const day=t.start||todayISO();
-      if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const cpdf=await pdfFromJpegs([bc],BLURB.pt);
+      if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const cpdf=bc?await pdfFromJpegs([bc],BLURB.pt):null;
         const nMemo=pl.filter(p=>p.type==="memo").length,blank=pl.some(p=>p.type==="blank");
         out.innerHTML=`<div class="bf1"></div><div class="bf2"></div>`;
         offerFile(out.querySelector(".bf1"),pdf,`gotripj-blurb-interior-${day}.pdf`,EN()?`① Interior · ${pl.length} pages · 6.875×6.875 in (with bleed).`+(nMemo?` Added ${nMemo} memo pages to reach the 20-page minimum.`:"")+(blank?" Added 1 blank page at the end to make the page count even.":""):`① 속지 ${pl.length}쪽 · 6.875×6.875인치(재단 여유 포함).`+(nMemo?` 최소 20쪽을 채우려고 메모 페이지 ${nMemo}쪽을 넣었어요.`:"")+(blank?" 쪽수를 짝수로 맞추려고 맨 뒤에 빈 페이지 1쪽을 넣었어요.":""));
-        offerFile(out.querySelector(".bf2"),cpdf,`gotripj-blurb-cover-${day}.pdf`,EN()?`② Cover · ${bc.Win} × 6.875 in (spine ${bc.sp} in). Softcover · Standard paper only.`:`② 표지 ${bc.Win} × 6.875인치 (책등 ${bc.sp}인치). 소프트커버 · 기본 용지 전용이에요.`);
+        if(cpdf)offerFile(out.querySelector(".bf2"),cpdf,`gotripj-blurb-cover-${day}.pdf`,EN()?`② Cover · ${bc.Win} × 6.875 in (spine ${bc.sp} in). Softcover · Standard paper only. Before ordering, enter ${pl.length} pages in Blurb's calculator and check the cover is ${bc.Win} in wide.`:`② 표지 ${bc.Win} × 6.875인치 (책등 ${bc.sp}인치). 소프트커버 · 기본 용지 전용이에요. 주문 전에 Blurb 계산기에 ${pl.length}쪽을 넣어 표지 크기가 ${bc.Win}인치인지 한 번 확인하세요.`);else out.querySelector(".bf2").innerHTML=`<p class="warnline">${EN()?`② The cover wasn't made because the spine width is missing. Enter the "Gutter / Spine" value for ${pl.length} pages from Blurb's calculator above and tap Make again.`:`② 책등 두께가 없어서 표지는 만들지 않았어요. 위 칸에 Blurb 계산기의 ${pl.length}쪽 "Gutter / Spine" 값을 넣고 다시 만들기를 눌러 주세요.`}</p>`;
         out.insertAdjacentHTML("beforeend",printHelpHTML("blurb",pl.length))}
       else if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("pdf",pl.length))}
       else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("jpg",pl.length))}
@@ -1317,10 +1336,10 @@ function emojiModal(dayId){const d=T&&T.days.find(x=>x.id===dayId);if(!d)return;
   <div class="emogrid">${EMOJIS.map(x=>`<button type="button" data-act="setEmoji" data-day="${d.id}" data-v="${x}" aria-pressed="${d.emoji===x}">${x}</button>`).join("")}</div>
   <div class="row" style="justify-content:space-between"><span class="hint">날짜 탭과 여행기에 붙어요 · 모두에게 보여요</span><button type="button" class="btn sm ghost" data-act="setEmoji" data-day="${d.id}" data-v="">빼기</button></div></div>`)}
 async function sendJpgs(out,dayId){
-  out.textContent="준비 중…";flushAll();const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));const files=[];const stamp=Date.now().toString(36);
+  out.textContent="준비 중…";flushAll();const tag=await tripTag(curId);const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));const files=[];const stamp=Date.now().toString(36);
   for(const [evId,list] of Object.entries(L.photos)){if(dayId&&evDay[evId]!==dayId)continue;
     for(const p of list){if(p.by&&p.by!==L.me)continue;const r=await dbGet("photos",p.id).catch(()=>null);if(!r)continue;
-      const meta={tid:curId,ev:evId,id:p.id,by:L.me||""};if(p.cap)meta.cap=p.cap;
+      const meta={tt:tag,ev:evId,id:p.id,by:L.me||""};if(p.cap)meta.cap=p.cap;
       files.push(new File([await jpgWithMeta(r.blob,meta)],`gotripj-${stamp}-${String(files.length+1).padStart(3,"0")}.jpg`,{type:"image/jpeg"}));out.textContent=`준비 중… ${files.length}장`}}
   if(!files.length){out.textContent="보낼 사진이 아직 없어요.";return}
   let ok=false;try{ok=!!(navigator.canShare&&navigator.canShare({files:files.slice(0,1)}))}catch(e){}
@@ -1345,7 +1364,7 @@ async function exportMine(out,incPriv,incOrig,dayId){
   if(L.cover&&!dayId){const r=await dbGet("photos",L.cover).catch(()=>null);if(r){files.push({name:`photos/${L.cover}.jpg`,blob:r.blob});cover=L.cover;
     if(incOrig){const o=await dbGet("orig",L.cover).catch(()=>null);if(o){const ext=(o.name.match(/\.[a-z0-9]+$/i)||[".jpg"])[0];coverOrig={file:`originals/${L.cover}${ext}`,name:o.name,type:o.type};files.push({name:coverOrig.file,blob:o.blob});origN++}}}}
   const notes=incPriv?Object.entries(L.priv).map(([key,n])=>({key,mood:n.mood||"",diary:n.diary||""})):[];
-  files.unshift({name:"manifest.json",data:enc.encode(JSON.stringify({app:"tripnote-photos",format:2,tid:curId,trip:T.name,from:L.me,fromName:pName(T,L.me),cover,coverOrig,photos,notes}))});
+  files.unshift({name:"manifest.json",data:enc.encode(JSON.stringify({app:"tripnote-photos",format:2,tt:await tripTag(curId),trip:T.name,from:L.me,fromName:pName(T,L.me),cover,coverOrig,photos,notes}))});
   if(!photos.length&&!cover&&!notes.length){out.textContent="보낼 사진이 아직 없어요.";return}
   const nm=(pName(T,L.me)||"me").replace(/[^\w가-힣]/g,"");
   const blob=await makeZip(files);const big=blob.size>80*1048576;
@@ -1373,14 +1392,14 @@ async function importPhotos(out){
   let added=0,skipped=0,notesN=0,unknown=0;const errs=[],origs=[];
   for(const f of files){out.textContent=`${f.name} 읽는 중…`;
     if(!/\.zip$/i.test(f.name)&&f.type!=="application/zip"){try{const b=new Uint8Array(await f.arrayBuffer());const mt=jpgMeta(b);
-        if(!mt||!mt.id||!mt.ev){unknown++;continue}if(mt.tid&&mt.tid!==curId){errs.push(`${f.name}: 다른 여행의 사진이에요`);continue}
+        if(!mt||!mt.id||!mt.ev){unknown++;continue}if(!(await sameTrip(mt))){errs.push(`${f.name}: 다른 여행의 사진이에요`);continue}
         if(!T.events.some(e=>e.id===mt.ev)){skipped++;continue}
         const ex=Object.values(L.photos).flat().find(x=>x.id===mt.id);if(ex){if(mt.cap)ex.cap=mt.cap;skipped++;continue}
         await dbPut("photos",{id:mt.id,blob:new Blob([b],{type:"image/jpeg"}),created:Date.now()});const ent={id:mt.id,by:mt.by||""};if(mt.cap)ent.cap=mt.cap;
         (L.photos[mt.ev]=L.photos[mt.ev]||[]).push(ent);added++}catch(e){errs.push(`${f.name}: 읽지 못했어요`)}continue}
     try{const en=await readZip(new Uint8Array(await f.arrayBuffer()));const mf=en.get("manifest.json");if(!mf)throw new Error("사진 보내기 파일이 아니에요");
       const man=JSON.parse(dec.decode(mf));if(man.app!=="tripnote-photos")throw new Error("사진 보내기 파일이 아니에요");
-      if(man.tid!==curId)throw new Error(`다른 여행(${man.trip||"?"})의 파일이에요`);
+      if(!(man.tt||man.tid)||!(await sameTrip(man)))throw new Error(`다른 여행(${man.trip||"?"})의 파일이에요`);
       const have=new Set(Object.values(L.photos).flat().map(p=>p.id));
       if(man.from!==L.me){for(const p of man.photos){if(p.orig&&en.get(p.orig))origs.push({blob:new Blob([en.get(p.orig)],{type:p.origType||"image/jpeg"}),name:p.origName||p.orig.split("/").pop(),type:p.origType})}
         if(man.coverOrig&&en.get(man.coverOrig.file))origs.push({blob:new Blob([en.get(man.coverOrig.file)],{type:man.coverOrig.type||"image/jpeg"}),name:man.coverOrig.name,type:man.coverOrig.type})}
