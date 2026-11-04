@@ -527,7 +527,7 @@ function prepHTML(t){
       <div class="row"><span class="hint">이 폰 사용자: <b>${esc(pName(t,L.me)||"정하지 않음")}</b></span><button class="btn sm ghost" data-act="whoami">바꾸기</button></div>
     </div>
     <div class="card">
-      <h3>출발 전 단체 사진 <span class="hint">여행기 표지가 돼요 · 이 폰에 저장</span></h3>
+      <h3>출발 전 단체 사진 <span class="hint">사진첩 표지나 첫 장(With)에 들어가요 · 이 폰에 저장</span></h3>
       <button type="button" class="cover-pick" data-act="pickCover">${L.cover?phImg(L.cover,"단체 사진"):""}<span>${L.cover?"사진 바꾸기":"+ 갤러리에서 고르기"}</span></button>
     </div>
     ${bookCardHTML(t)}
@@ -571,7 +571,7 @@ function budgetHTML(t){
     ${t.people.length?`<div class="card"><h3>누가 냈나 ${off?"":`<span class="hint mono">1인당 ${money(share,t)}</span>`}</h3>
       <div class="catbars">${byP.map(([p,v0,tr])=>{const v=off?v0+tr:v0;const diff=v0-share;return `<div class="cbar" style="grid-template-columns:72px 1fr auto"><span>${esc(p.name)}</span><span class="mono">${money(v,t)}${tr&&!off?`<small class="treatline">🎁 쏜 금액 ${money(tr,t)}</small>`:""}</span>${off?`<span class="amt" style="color:var(--muted)">${spent?Math.round(v/spent*100):0}%</span>`:`<span class="amt" style="color:${Math.abs(diff)<0.01?"var(--muted)":diff>0?"var(--done)":"var(--hold)"}">${Math.abs(diff)<0.01?"정산 완료":diff>0?"받을 돈 "+money(diff,t):"낼 돈 "+money(-diff,t)}</span>`}</div>`}).join("")}</div>
       <p class="hint">${off?"가계부로만 기록하는 여행이에요. 누가 얼마를 냈는지만 보여요.":"🎁 쏜 지출을 빼고 나머지를 모두 똑같이 나눈 계산이에요. 결제한 사람이 지정된 지출만 합산합니다. 지출을 넣을 때 '🎁 낸 사람이 쏨'을 체크하면 나눠 내지 않아요."}</p>
-      <button type="button" class="linkbtn" data-act="settle" data-v="${off?"split":"none"}">${off?"💸 정산 켜기 (나눠 내기)":"정산 끄기 (부부 · 가족 가계부)"}</button></div>`:""}
+      <button type="button" class="linkbtn" data-act="settle" data-v="${off?"split":"none"}">${off?"💸 정산 켜기 (나눠 내기)":"정산 끄기"}</button></div>`:""}
     <div class="row" style="justify-content:space-between"><h2 style="font-size:18px">지출 내역</h2><button class="btn primary" data-act="addExp">+ 지출 추가</button></div>
     <div style="display:flex;flex-direction:column;gap:8px">${list||`<div class="empty"><p>영수증을 찍어 두고 금액만 입력하면, 모두의 지출이 카테고리별·사람별로 정리돼요. 영수증 사진은 찍은 사람 폰에만 저장돼요.</p><button class="btn primary" data-act="addExp">+ 첫 지출 추가</button></div>`}</div>
   </div>`;
@@ -613,7 +613,10 @@ const phCap=id=>{if(!L)return "";for(const l of Object.values(L.photos||{})){con
 function pbCap(ctx,txt,x,y,w,h,u,font){if(!txt)return;font(Math.min(3,w/(18*u)*3),600);const lines=pbLines(ctx,txt,w-4*u,2);const lh=parseFloat(ctx.font.match(/(\d+)px/)[1])*1.3;
   const bh=lines.length*lh+3*u;const g=ctx.createLinearGradient(0,y+h-bh-4*u,0,y+h);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.62)");
   ctx.fillStyle=g;ctx.fillRect(x,y+h-bh-4*u,w,bh+4*u);ctx.fillStyle="#fff";lines.forEach((l,k)=>ctx.fillText(l,x+2*u,y+h-bh+1.5*u+k*lh))}
-function pbFill(ctx,img,x,y,w,h){const iw=img.width,ih=img.height;const s=Math.max(w/iw,h/ih);const sw=w/s,sh=h/s;ctx.drawImage(img,(iw-sw)/2,(ih-sh)/2,sw,sh,x,y,w,h)}
+// 자르기 기준점(11/03): 기본은 가로 가운데 · 세로 위에서 40%(얼굴은 보통 위쪽에 있어요). 사진 편집에서 얼굴을 탭하면 그 점(f=[가로,세로] 0~1)이 기준이 돼요
+const PB_FOCUS=[.5,.4];function focusOf(id){if(!id||!L)return null;for(const l of Object.values(L.photos||{})){const e=l.find(p=>p.id===id);if(e&&e.f)return e.f}return null}
+function pbFill(ctx,img,x,y,w,h,f){const iw=img.width,ih=img.height;const s=Math.max(w/iw,h/ih);const sw=w/s,sh=h/s;const [fx,fy]=f||PB_FOCUS;
+  const sx=Math.min(Math.max(iw*fx-sw/2,0),iw-sw),sy=Math.min(Math.max(ih*fy-sh/2,0),ih-sh);ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h)}
 function pbLines(ctx,text,maxW,maxLines){const out=[];
   for(const para of String(text||"").split("\n")){let line="";
     for(const tok of para.split(/(\s+)/)){if(!tok)continue;
@@ -686,7 +689,9 @@ function pbLetters(t,o,pages){const mc=document.createElement("canvas").getConte
     const lay=(o.roll==="bubble")?bubbleLayout:rollLayout;
     let rest=g.list,first=true;while(rest.length){let sc=1;for(const t2 of [1.6,1.45,1.3,1.15]){if(lay(mc,1000,rest,t2).next===rest.length){sc=t2;break}}
       const {next}=lay(mc,1000,rest,sc);pages.push({type:o.roll==="bubble"?"bubble":"roll",to:g.to,n:g.list.length,list:rest.slice(0,next),cont:!first,sc});rest=rest.slice(next);first=false}}}
-function pbPlan(t,o){const pages=[{type:"cover"}];let nPh=0;
+// 한 일정의 사진을 쪽으로 나누기(11/02 확정 '3장 먼저'): 4장까지는 한 쪽, 5장부터는 ⭐가 든 3장 쪽을 맨 앞에 두고 나머지를 4장 이하로 고르게
+function phChunks(n){if(n<=4)return n?[n]:[];const r=n-3,c=Math.ceil(r/4),out=[3];for(let j=0;j<c;j++)out.push(Math.floor(r/c)+(j<r%c?1:0));return out}
+function pbPlan(t,o){const pages=[{type:"cover"}];if(o.withPg)pages.push({type:"with"});let nPh=0;
   const notesOf=key=>allNotes(key).filter(n=>o.priv||!n.mine||n.shared);
   if(o.couple){const A=o.couple.a.id,B=o.couple.b.id;const who=n=>n.mine?L.me:n.by;
     t.days.forEach((d,i)=>{const evs=evsOf(t,d.id).filter(e=>e.status==="done");const dn=notesOf("day-"+d.id);const list=[];let any=false;
@@ -705,7 +710,7 @@ function pbPlan(t,o){const pages=[{type:"cover"}];let nPh=0;
     if(!evs.length&&!dn.length)return;
     pages.push({type:"day",d,i,notes:dn,list:noPh.filter(e=>e.cat!=="move"||notesOf("ev-"+e.id).length).map(e=>({e,n:notesOf("ev-"+e.id)[0]}))});
     withPh.forEach(e=>{const ph=photosOf(e.id).map(p=>p.id);nPh+=ph.length;const ns=notesOf("ev-"+e.id);
-      const per=Math.ceil(ph.length/Math.ceil(ph.length/4));for(let k=0;k<ph.length;k+=per)pages.push({type:"photos",d,i,e,ph:ph.slice(k,k+per),notes:k?[]:ns,cont:k>0})})});
+      let k=0;phChunks(ph.length).forEach((c,j)=>{pages.push({type:"photos",d,i,e,ph:ph.slice(k,k+c),notes:k?[]:ns,cont:k>0,star:j===0});k+=c})})});
   pbLetters(t,o,pages);pages.push({type:"end",nPh});return pages}
 const EN=()=>LANG==="en";const nNotes=(n,ko,en1,enN)=>EN()?`${n} ${n===1?en1:enN}`:`${n}${ko}`;const CONT=()=>EN()?" (continued)":" (계속)";
 async function pbDraw(t,pg,S,o,cover){
@@ -715,7 +720,7 @@ async function pbDraw(t,pg,S,o,cover){
   const F=(sz,w)=>x.font=`${w||400} ${Math.round(sz*u)}px ${PB_FONT}`;x.textBaseline="top";
   x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);
   if(pg.type==="cover"){
-    if(cover){pbFill(x,cover,0,0,S,S);const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
+    if(cover){pbFill(x,cover,0,0,S,S,focusOf(o.coverId));const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
     else{x.fillStyle=acc;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
     if(o.couple){const cp=o.couple;F(8,800);const ctl=pbLines(x,t.name,S-2*m,2).length;let y=Math.min(S*.6,S-m-(13+ctl*9.4+1.5+5+(cp.line?4.5:0))*u);x.font=`italic 400 ${Math.round(4*u)}px ${SERIF}`;x.globalAlpha=.9;
       x.fillText(`${cp.a.label} & ${cp.b.label}`,m,y);x.globalAlpha=1;y+=6.5*u;
@@ -821,12 +826,17 @@ async function pbDraw(t,pg,S,o,cover){
       const txt=txtOf(n);F(2.9,400);const tl=txt?pbLines(x,txt,cw,pg.cont?0:4):[];const th2=tl.length?tl.length*4.3*u+1.5*u:0;
       const ph=bottom-th2-yy;const gh=Math.round(1.2*u);
       if(ids.length){const imgs=[];for(const id of ids)imgs.push(await pbImage(id,o.orig));const h=ids.length>1?(ph-gh)/2:ph;
-        imgs.forEach((im,k)=>{const by=yy+k*(h+gh);if(im){pbFill(x,im,cx,by,cw,h);im.close&&im.close()}else{x.fillStyle="#EEE4E8";x.fillRect(cx,by,cw,h)}if(o.text)pbCap(x,phCap(ids[k]),cx,by,cw,h,u,F)})}
+        imgs.forEach((im,k)=>{const by=yy+k*(h+gh);if(im){pbFill(x,im,cx,by,cw,h,focusOf(ids&&ids[k]));im.close&&im.close()}else{x.fillStyle="#EEE4E8";x.fillRect(cx,by,cw,h)}if(o.text)pbCap(x,phCap(ids[k]),cx,by,cw,h,u,F)})}
       else{x.fillStyle=soft;x.fillRect(cx,top+5.4*u,cw,bottom-top-5.4*u);x.fillStyle=ink;F(3.6,500);const q=pbLines(x,"“"+txt+"”",cw-6*u,8);
         const qh=q.length*5.4*u;pbText(x,q,cx+3*u,top+5.4*u+(bottom-top-5.4*u-qh)/2,5.4*u);return}
       if(tl.length){x.fillStyle=ink;F(2.9,400);pbText(x,tl,cx,bottom-th2+1.5*u,4.3*u)}};
     if(emptyA||emptyB){const sd=emptyA?[cp.b.label,pg.pb,pg.nb]:[cp.a.label,pg.pa,pg.na];await col(m,sd[0],sd[1],sd[2],S-2*m)}
     else{await col(m,cp.a.label,pg.pa,pg.na,cw);await col(m+cw+gap,cp.b.label,pg.pb,pg.nb,cw);x.fillStyle=soft;x.fillRect(m+cw+gap/2-.5,top,1,bottom-top)}
+  }else if(pg.type==="with"){ // 1쪽 '함께한 사람들': 표지를 다른 사진·색으로 바꿨을 때 단체 사진이 여기로 와요(11/02)
+    const W=S-2*m,top=m+9*u,H=Math.round(S*.58);x.fillStyle=acc;x.font=`italic 400 ${Math.round(6*u)}px ${SERIF}`;x.fillText("With",m,m);
+    if(o.withImg)pbFill(x,o.withImg,m,top,W,H,focusOf(L.cover));else{x.fillStyle=soft;x.fillRect(m,top,W,H)}
+    let y=top+H+4.5*u;x.fillStyle=ink;F(4,700);y=pbText(x,pbLines(x,t.people.map(p=>p.name).join(" · ")||t.name,W,2),m,y,5.6*u)+1.2*u;
+    x.fillStyle=mut;F(2.8,500);const ln=`${t.name}  ·  ${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`;x.fillText(pbLines(x,ln,W,1)[0],m,Math.min(y,PB_BLURB?S-m*1.45:S-m*.9))
   }else if(pg.type==="blank"){
   }else if(pg.type==="memo"){
     x.fillStyle=acc;F(2.6,700);x.fillText(EN()?"NOTES":"메모",m,m*1.1);
@@ -835,7 +845,7 @@ async function pbDraw(t,pg,S,o,cover){
   }else if(pg.type==="photos"){
     const capH=o.text&&!pg.cont?S*.2:S*.13;const W=S-2*m,H=S-m-capH-m*.4;const gap=Math.round(1.2*u);
     const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
-    const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh);else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}if(o.text)pbCap(x,phCap(pg.ph[i]),bx,by,bw,bh,u,F)};
+    const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh,focusOf(pg.ph[i]));else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}if(o.text)pbCap(x,phCap(pg.ph[i]),bx,by,bw,bh,u,F)};
     const n=imgs.length,X=m,Y=m;
     if(n===1&&o.single!=="full"){const im=imgs[0],rnd=prng(hashStr(pg.ph[0]));
       x.fillStyle=soft;x.fillRect(0,0,S,S);
@@ -843,13 +853,19 @@ async function pbDraw(t,pg,S,o,cover){
       let pw=W*.74-2*pad,ph=pw/ar;const maxPh=H*.9-pad-bot;if(ph>maxPh){ph=maxPh;pw=ph*ar}
       const fw=pw+2*pad,fh=ph+pad+bot,cx=S/2,cy=Y+H/2,rot=(rnd()-.5)*.09;
       x.save();x.translate(cx,cy);x.rotate(rot);x.shadowColor="rgba(0,0,0,.22)";x.shadowBlur=3*u;x.shadowOffsetY=1*u;x.fillStyle="#fff";x.fillRect(-fw/2,-fh/2,fw,fh);x.shadowColor="transparent";
-      if(im)pbFill(x,im,-fw/2+pad,-fh/2+pad,pw,ph);else{x.fillStyle="#E6EBEE";x.fillRect(-fw/2+pad,-fh/2+pad,pw,ph)}
+      if(im)pbFill(x,im,-fw/2+pad,-fh/2+pad,pw,ph,focusOf(pg.ph[0]));else{x.fillStyle="#E6EBEE";x.fillRect(-fw/2+pad,-fh/2+pad,pw,ph)}
       const cap=o.text?phCap(pg.ph[0]):"";if(cap){x.fillStyle=ink;x.font=`italic 400 ${Math.round(3.6*u)}px ${SERIF}`;x.textAlign="center";x.fillText(pbLines(x,cap,pw,1)[0],0,fh/2-bot+3.4*u);x.textAlign="left"}
       x.fillStyle="rgba(255,236,170,.78)";x.save();x.translate(0,-fh/2);x.rotate(-.06+rnd()*.12);x.fillRect(-9*u,-2.4*u,18*u,4.8*u);x.restore();x.restore();
       if(o.stk){const occ=[{x:cx-fw/2-3*u,y:cy-fh/2-4*u,w:fw+6*u,h:fh+8*u},{x:0,y:Y+H,w:S,h:S}];placeStickers(x,S,occ,stickerSet(t,o),hashStr(pg.ph[0]),4)}}
     else if(n===1)box(0,X,Y,W,H);
-    else if(n===2){const w=(W-gap)/2;box(0,X,Y,w,H);box(1,X+w+gap,Y,w,H)}
-    else if(n===3){const w=(W-gap)*.6;box(0,X,Y,w,H);const h=(H-gap)/2;box(1,X+w+gap,Y,W-w-gap,h);box(2,X+w+gap,Y+h+gap,W-w-gap,h)}
+    // 사진 모양에 맞춰 칸 모양을 골라요(11/03 B안): 가로 사진이 많으면 가로로 긴 칸, 세로 사진이 많으면 세로로 긴 칸
+    else if(n===2){const wide=imgs.filter(im=>im&&im.width>im.height*1.1).length===2;
+      if(wide){const h=(H-gap)/2;box(0,X,Y,W,h);box(1,X,Y+h+gap,W,h)}else{const w=(W-gap)/2;box(0,X,Y,w,H);box(1,X+w+gap,Y,w,H)}}
+    else if(n===3&&pg.star!==false){const big=imgs[0];const wide=big&&big.width>big.height*1.1; // ⭐ 대표(첫 사진)를 크게
+      if(wide){const h=(H-gap)*.6;box(0,X,Y,W,h);const w=(W-gap)/2;box(1,X,Y+h+gap,w,H-h-gap);box(2,X+w+gap,Y+h+gap,w,H-h-gap)}
+      else{const w=(W-gap)*.6;box(0,X,Y,w,H);const h=(H-gap)/2;box(1,X+w+gap,Y,W-w-gap,h);box(2,X+w+gap,Y+h+gap,W-w-gap,h)}}
+    else if(n===3){const nw=imgs.filter(im=>im&&im.width>im.height*1.1).length; // ⭐가 없는 3장 쪽: 셋 다 같은 크기
+      if(nw>=2){const h=(H-2*gap)/3;[0,1,2].forEach(k=>box(k,X,Y+k*(h+gap),W,h))}else{const w=(W-2*gap)/3;[0,1,2].forEach(k=>box(k,X+k*(w+gap),Y,w,H))}}
     else{const w=(W-gap)/2,h=(H-gap)/2;box(0,X,Y,w,h);box(1,X+w+gap,Y,w,h);box(2,X,Y+h+gap,w,h);box(3,X+w+gap,Y+h+gap,w,h)}
     imgs.forEach(im=>im&&im.close&&im.close());
     let y=Y+H+m*.45;const e=pg.e;
@@ -889,6 +905,7 @@ function photobookModal(){const t=T;if(!t)return;
     <p class="hint">이 폰에 있는 사진만 들어가요. 다른 사람 사진까지 넣으려면 먼저 ⋯ → '사진 모으기'로 합쳐 주세요.</p>
     <div class="field"><label for="pb-q">화질</label><select class="inp" id="pb-q"><option value="1600">보기·공유용 (가벼움)</option><option value="2400">인쇄용 (고화질, 원본 사진 사용)</option></select></div>
     <div class="field"><label for="pb-f">파일 형태</label><select class="inp" id="pb-f"><option value="blurb">Blurb 인쇄용 (7×7 소프트커버 · 속지 + 표지 PDF)</option><option value="pdf">PDF 한 파일 (보기, 인쇄소 맡기기)</option><option value="jpg">페이지별 사진 묶음 (Mixbook·Shutterfly에 한 장씩 꽉 차게 올리기)</option></select></div>
+    <div class="field"><label>표지</label><div class="seg" role="group" id="pb-cv">${[["group","단체 사진"],["photo","사진 고르기"],["color","색만"]].map(([k,n])=>`<button type="button" data-v="${k}"${k==="group"&&!L.cover?" disabled":""}>${n}</button>`).join("")}</div><div class="pbcv" id="pbCvInfo"></div></div>
     ${t.people.length>=2?`<div class="field"><label for="pb-d">디자인</label><select class="inp" id="pb-d"><option value="basic">기본</option><option value="couple">커플 (Her · His)</option></select></div>
     <div id="pbCpl" hidden><p class="hint">일정마다 두 칸으로 나눠, 각자 찍은 사진과 각자 쓴 한 줄을 나란히 넣어요.</p>
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
@@ -902,34 +919,51 @@ function photobookModal(){const t=T;if(!t)return;
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-p" checked> 나만 보기 기록도 넣기 <span class="hint">(남에게 줄 사진첩이면 끄세요)</span></label>
     <div id="pbOut" class="hint"></div><div id="pbPrev" class="pbprev"></div>
     <div class="row" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">닫기</button><button type="button" class="btn" id="pbPv"${pages.length<3?" disabled":""}>미리보기</button><button type="button" class="btn primary" id="pbGo"${pages.length<3?" disabled":""}>만들기</button></div></div>`);
+  // 표지 고르기(11/02): 단체 사진(기본) / 이 여행 사진 중 하나 / 색만. 단체 사진이 표지가 아니면 1쪽 'With'로 가요
+  const allPh=[...new Set(t.events.flatMap(e=>photosOf(e.id).map(p=>p.id)))];
+  let cv=Object.assign({},L.pbCov||{});if(cv.mode==="group"&&!L.cover)cv={};if(cv.mode==="photo"&&!allPh.includes(cv.id))cv={};if(!cv.mode)cv={mode:L.cover?"group":"color"};
+  const cvSel=()=>({id:cv.mode==="group"?L.cover:cv.mode==="photo"?cv.id:null,withPg:cv.mode!=="group"&&!!L.cover});
+  const cvShow=()=>{m.querySelectorAll("#pb-cv button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===cv.mode)));const box=m.querySelector("#pbCvInfo");
+    const w=L.cover?(EN()?" The group photo goes on page 1, “With”.":" 단체 사진은 1쪽 'With'에 들어가요."):"";
+    box.innerHTML=cv.mode==="group"?`<p class="hint">${EN()?"The group photo from the Prep tab is the cover.":"준비 탭의 단체 사진이 표지가 돼요."}</p>`
+      :cv.mode==="photo"?`<div class="row" style="gap:10px;flex-wrap:nowrap">${phImg(cv.id,"표지 사진",'class="pbcv-th"')}<p class="hint" style="margin:0">${EN()?"This photo is the cover.":"이 사진이 표지가 돼요."}${w}</p></div>`
+      :`<p class="hint">${EN()?"Theme color with the trip name only (change the color in ⋯ → Look).":"테마 색 바탕에 여행 이름만 들어가요 (색은 ⋯ → 꾸미기에서 바꿔요)."}${w}</p>`;hydrate()};
+  const cvSet=v=>{cv=v;L.pbCov=v;putLocal();cvShow();spineUpd()};
+  m.querySelector("#pb-cv").onclick=ev=>{const b=ev.target.closest("button[data-v]");if(!b||b.disabled)return;const v=b.dataset.v;
+    if(v!=="photo"){cvSet({mode:v});return}
+    if(!allPh.length){toast(EN()?"No photos in this trip's plans yet":"아직 일정에 올린 사진이 없어요");return}
+    const pk=modal(`<div class="card" style="max-height:88vh;overflow-y:auto"><h3>${EN()?"Pick a cover photo":"표지 사진 고르기"} <button type="button" class="btn sm" data-x="close">닫기</button></h3><p class="hint">이 여행 일정에 올린 사진이에요.</p><div class="covgrid">${allPh.map(id=>`<button type="button" data-id="${esc(id)}"${cv.mode==="photo"&&cv.id===id?' aria-pressed="true"':""}>${phImg(id,"사진",'loading="lazy"')}</button>`).join("")}</div></div>`);hydrate();
+    pk.addEventListener("click",e2=>{const c=e2.target.closest("[data-id]");if(c){cvSet({mode:"photo",id:c.dataset.id});pk.remove();return}if(e2.target.closest('[data-x="close"]'))pk.remove()})};
   const readO=out=>{const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:m.querySelector("#pb-s").checked,single:m.querySelector("#pb-1").value};
     if(dSel&&dSel.value==="couple"){const g=k=>({id:m.querySelector("#pb-p"+k).value,label:m.querySelector("#pb-l"+k).value.trim()||(k==="a"?"Her":"His")});
       o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";return null}}
-    return o};
+    const cs=cvSel();o.coverId=cs.id;o.withPg=cs.withPg;return o};
   m.querySelector("#pbPv").onclick=async ev=>{const b=ev.currentTarget;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");const o=readO(out);if(!o)return;b.disabled=true;prev.innerHTML="";
     const bl=m.querySelector("#pb-f").value==="blurb";
-    try{flushAll();let pl=pbPlan(t,o);if(bl)pl=blurbPages(pl);const cover=L.cover?await pbImage(L.cover,false):null;PB_BLURB=bl;
+    try{flushAll();let pl=pbPlan(t,o);if(bl)pl=blurbPages(pl);const cover=o.coverId?await pbImage(o.coverId,false):null;o.withImg=o.withPg?await pbImage(L.cover,false):null;PB_BLURB=bl;
+      const addIm=(blob,alt)=>{const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=alt;im.onclick=()=>{const l=document.createElement("div");l.className="lightbox";l.innerHTML=`<img src="${im.src}" alt="${alt}">`;l.onclick=()=>l.remove();document.body.appendChild(l)};prev.appendChild(im)};
+      if(bl)addIm(await pbDraw(t,{type:"cover"},560,o,cover),"앞표지"); // Blurb는 표지가 따로라 속지 목록에 없어요 — 고른 표지가 보이게 맨 앞에 앞표지를 보여 줘요
       for(let k=0;k<pl.length;k++){out.textContent=`미리보기 ${k+1} / ${pl.length}쪽…`;let blob=await pbDraw(t,pl[k],560,o,cover);if(bl)blob=await gutterShift(blob,560,k%2===0?1:-1);const im=document.createElement("img");im.src=URL.createObjectURL(blob);im.alt=`${k+1}쪽`;
         im.onclick=()=>{const l=document.createElement("div");l.className="lightbox";l.innerHTML=`<img src="${im.src}" alt="${k+1}쪽 크게 보기">`;l.onclick=()=>l.remove();document.body.appendChild(l)};prev.appendChild(im)}
-      PB_BLURB=false;cover&&cover.close&&cover.close();out.textContent=`${pl.length}쪽 미리보기예요. 눌러서 크게 볼 수 있어요. 옵션을 바꾸고 다시 눌러 보세요.`}
+      PB_BLURB=false;cover&&cover.close&&cover.close();o.withImg&&o.withImg.close&&o.withImg.close();out.textContent=`${pl.length}쪽 미리보기예요. 눌러서 크게 볼 수 있어요. 옵션을 바꾸고 다시 눌러 보세요.`}
     catch(e){PB_BLURB=false;console.error(e);out.textContent="미리보기를 만들지 못했어요."}b.disabled=false};
   const spineUpd=()=>{const box=m.querySelector("#pbSpineBox");const on=m.querySelector("#pb-f").value==="blurb";box.hidden=!on;if(!on)return;
-    const o0=(typeof readO==="function"&&readO({textContent:""}))||{text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:true,single:"pola"};
+    const o0=(typeof readO==="function"&&readO({textContent:""}))||{text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:true,single:"pola",...(()=>{const c=cvSel();return {coverId:c.id,withPg:c.withPg}})()};
     const n=blurbPages(pbPlan(t,o0)).length;m._bn=n;const v=BLURB.spine(n);const inp=m.querySelector("#pb-spine");
     m.querySelector("#pbSpineInfo").textContent=EN()?`· this book: ${n} pages`:`· 이 책: ${n}쪽`;
     if(v!=null&&(!inp.dataset.n||inp.dataset.n!=String(n)||!inp.value))inp.value=v;inp.dataset.n=n;
     m.querySelector("#pbSpineHelp").innerHTML=BLURB.known[n]!=null?(EN()?"Checked value — you can leave it.":"확인된 값이에요. 그대로 두면 돼요."):(EN()?`Open <a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb's calculator</a>, pick Small Square · Softcover · Standard · ${n} pages, and enter the "Gutter / Spine" width. Without it, only the interior PDF is made.`:`<a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb 계산기</a>에서 Small Square · Softcover · Standard · ${n}쪽을 넣고, "Gutter / Spine"의 앞 숫자를 적어 주세요. 비워 두면 속지만 만들어요.`)};
-  ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});setTimeout(spineUpd,0);
+  ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});setTimeout(()=>{cvShow();spineUpd()},0);
   const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
   m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut");
     const fmt=m.querySelector("#pb-f").value,S=fmt==="blurb"?BLURB.px:+m.querySelector("#pb-q").value;const o=readO(out);if(!o){b.disabled=false;return}o.orig=S>2000;
-    try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=L.cover?await pbImage(L.cover,o.orig):null;const res=[];
+    try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=o.coverId?await pbImage(o.coverId,o.orig):null;o.withImg=o.withPg?await pbImage(L.cover,o.orig):null;const res=[];
       PB_BLURB=fmt==="blurb";
       try{for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;let blob=await pbDraw(t,pl[k],S,o,cover);if(fmt==="blurb")blob=await gutterShift(blob,S,k%2===0?1:-1);res.push({blob,w:S,h:S})}}finally{PB_BLURB=false}
       let bc=null;if(fmt==="blurb"){const si=m.querySelector("#pb-spine");const sv=si.dataset.n===String(pl.length)?parseFloat(si.value):BLURB.spine(pl.length);
         if(sv>0&&sv<3){if(BLURB.known[pl.length]==null){prefs.spines=Object.assign(prefs.spines||{},{[pl.length]:sv});savePrefs()}
           out.textContent=EN()?"Making the cover…":"표지 만드는 중…";PB_BLURB=true;try{bc=await blurbCover(t,o,cover,pl.length,sv);bc.sp=sv}finally{PB_BLURB=false}}}
-      cover&&cover.close&&cover.close();const day=t.start||todayISO();
+      cover&&cover.close&&cover.close();o.withImg&&o.withImg.close&&o.withImg.close();const day=t.start||todayISO();
       if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const cpdf=bc?await pdfFromJpegs([bc],BLURB.pt):null;
         const nMemo=pl.filter(p=>p.type==="memo").length,blank=pl.some(p=>p.type==="blank");
         out.innerHTML=`<div class="bf1"></div><div class="bf2"></div>`;
@@ -1095,7 +1129,7 @@ function tripModal(edit){
       <div class="field"><label for="t-end">종료일</label><input class="inp mono" type="date" id="t-end" required value="${t?.end||today}"></div></div>
     ${edit?"":`<div class="field"><label for="t-me">내 이름</label><input class="inp" id="t-me" required placeholder="예: 나, 민수"></div>
       <div class="field"><label for="t-people">함께 가는 사람 (쉼표로 구분, 각자 참여할 때 넣어도 돼요)</label><input class="inp" id="t-people" placeholder="엄마, 아빠"></div>
-      <div class="field"><label>💸 비용을 나눠 내나요?</label><div class="seg wide" role="group" id="t-settle"><button type="button" data-v="split" aria-pressed="true">나눠 내요 (친구 · 형제)</button><button type="button" data-v="none" aria-pressed="false">안 나눠요 (부부 · 가족 가계부)</button></div><p class="hint">나중에 예산 탭에서 바꿀 수 있어요.</p></div>`}
+      <div class="field"><label>💸 비용을 나눠 내나요?</label><div class="seg wide" role="group" id="t-settle"><button type="button" data-v="split" aria-pressed="true">나눠 내요 (친구 · 형제)</button><button type="button" data-v="none" aria-pressed="false">안 나눠요 (한 사람이 내거나, 기록만)</button></div><p class="hint">나중에 예산 탭에서 바꿀 수 있어요.</p></div>`}
     <p class="hint">${edit?"기간을 줄이면 빠지는 날짜의 일정은 보류함으로 옮겨져요. 바꾼 내용은 모두에게 보여요.":"기간에 맞춰 날짜별 탭과 기본 준비 체크리스트가 만들어지고, 초대 코드가 생겨요 (최대 60일)."}</p>
     <p class="hint" id="t-err" style="color:var(--danger)" hidden></p>
     <div class="row" style="justify-content:space-between">${edit?`<div class="row"><button type="button" class="btn sm" data-act="leave">이 폰에서만 빼기</button>${isOwner()?`<button type="button" class="btn sm danger" data-act="delTrip">모두에게서 삭제</button>`:""}</div>`:"<span></span>"}
@@ -1185,11 +1219,14 @@ async function phEditor(e,i){const list=e&&L.photos[e.id];if(!list||!list[i])ret
   const l=document.createElement("div");l.className="lightbox phedit";document.body.appendChild(l);
   const draw=async()=>{const p=list[i],u=await photoURL(p.id);const n=list.length;
     l.innerHTML=`<div class="phe-top"><span>${i+1} / ${n}${i===0&&n>1?" · ⭐ 대표 사진":""}</span><button type="button" data-x="close">닫기</button></div>
-      <img src="${u||""}" alt="사진 ${i+1}">
+      <div class="phe-pic"><img src="${u||""}" alt="사진 ${i+1}">${p.f?`<span class="phe-dot" style="left:${p.f[0]*100}%;top:${p.f[1]*100}%"></span>`:""}</div>
+      <p class="phe-hint"><span>${p.f?"사진첩은 표시한 점을 중심으로 잘라요. 다시 탭하면 옮겨져요.":"얼굴을 탭하면 사진첩에서 그 부분이 잘리지 않게 맞춰요."}</span> ${p.f?`<button type="button" class="linkbtn" data-x="unfocus">표시 지우기</button>`:""}</p>
       ${n>1?`<div class="phe-bar"><button type="button" data-x="prev" ${i===0?"disabled":""}>◀ 앞으로</button><button type="button" data-x="star" ${i===0?"disabled":""}>⭐ 대표로</button><button type="button" data-x="next" ${i===n-1?"disabled":""}>뒤로 ▶</button></div>
       <p class="phe-hint">순서는 이 폰의 여행기와 사진첩에 그대로 쓰여요. 대표 사진은 맨 앞에 와요.</p>`:""}`};
   const move=j=>{const [p]=list.splice(i,1);list.splice(j,0,p);i=j;putLocal();if(openEv===e.id)$("#photoGrid").innerHTML=photosHTML(e);draw()};
-  l.addEventListener("click",ev=>{const x=ev.target.closest("[data-x]");if(!x){if(ev.target===l)l.remove();return}const k=x.dataset.x;
+  l.addEventListener("click",ev=>{if(ev.target.matches(".phe-pic img")){const r=ev.target.getBoundingClientRect();const q=v=>Math.round(Math.min(1,Math.max(0,v))*1000)/1000;
+      list[i].f=[q((ev.clientX-r.left)/r.width),q((ev.clientY-r.top)/r.height)];putLocal();toast("사진첩에서 이 부분을 중심으로 맞출게요");draw();return}
+    const x=ev.target.closest("[data-x]");if(!x){if(ev.target===l)l.remove();return}const k=x.dataset.x;if(k==="unfocus"){delete list[i].f;putLocal();draw();return}
     if(k==="close")l.remove();else if(k==="prev"&&i>0)move(i-1);else if(k==="next"&&i<list.length-1)move(i+1);else if(k==="star"&&i>0){move(0);toast("대표 사진으로 정했어요")}});
   draw()}
 function capModal(e,i){const p=e&&(L.photos[e.id]||[])[i];if(!p)return;
@@ -1242,7 +1279,7 @@ function pasteModal(){
     <h3>Claude가 만든 내용 붙여넣기</h3>
     <p class="hint">Claude 채팅에서 받은 JSON을 그대로 붙여넣으세요. 형식을 모르면 '요청 문구 복사'를 눌러 Claude에게 보내면 이 형식으로 만들어줘요.</p>
     <button type="button" class="btn sm" data-act="copyFmt" style="align-self:flex-start">요청 문구 복사</button>
-    <textarea class="inp mono" id="pasteIn" rows="9" placeholder='{"type":"tripnote", ...}' style="font-size:12px"></textarea>
+    <textarea class="inp mono" id="pasteIn" rows="9" placeholder='{"type":"tripnote", ...}' style="font-size:14px"></textarea>
     <p class="hint" id="pasteMsg" hidden></p>
     <div class="row" id="pasteBtns" style="justify-content:flex-end"><button type="button" class="btn" data-act="closeModal">취소</button><button class="btn primary">확인</button></div></form>`);
   const msg=m.querySelector("#pasteMsg"),btns=m.querySelector("#pasteBtns");
@@ -1276,6 +1313,8 @@ async function settingsModal(){
   const t=T;
   const m=modal(`<div class="card" style="max-height:92vh;overflow-y:auto">
     <h3>메뉴 <button type="button" class="btn sm" data-act="closeModal">닫기</button></h3>
+    <div class="field"><label data-nt>🌐 언어 · Language</label><div class="seg wide" role="group" style="white-space:nowrap">${[["auto","자동"],["ko","한국어"],["en","English"]].map(([k,n])=>`<button type="button" data-act="setLang" data-v="${k}" aria-pressed="${(prefs.lang||"auto")===k}">${n}</button>`).join("")}</div><p class="hint" style="margin:4px 0 0">자동은 폰 언어 설정을 따라가요.</p></div>
+    <div class="field"><label>글씨 크기</label>${seg("font",[["normal","보통"],["large","크게"],["xl","아주 크게"]])}</div>
     <button type="button" class="btn" data-act="decor">🎨 꾸미기 · 화면 · 내비 앱</button><hr>
     ${t?`<span class="eyebrow">이 여행 · ${esc(t.name)}</span>
     <div class="slist">
@@ -1317,9 +1356,7 @@ function decorHTML(){const t=T;
   return `<h3>꾸미기 <button type="button" class="btn sm" data-act="closeModal">닫기</button></h3>
   ${t?`<div class="field"><label>이 여행 색 <span class="hint">함께하는 모두에게 보여요</span></label><div class="swatches">${Object.entries(THEMES).map(([k,v])=>`<button type="button" class="sw" data-act="setTheme" data-v="${k}" aria-pressed="${t.theme===k}" style="--sw:${(isDark()?v.d:v.l)[0]}"><i></i>${v.n}</button>`).join("")}</div></div><hr>`:""}
   <span class="eyebrow">이 폰에서만 바뀌어요</span>
-  <div class="field"><label>언어 · Language</label><div class="seg" role="group">${[["auto","자동 (폰 설정)"],["ko","한국어"],["en","English"]].map(([k,n])=>`<button type="button" data-act="setLang" data-v="${k}" aria-pressed="${(prefs.lang||"auto")===k}">${n}</button>`).join("")}</div></div>
   <div class="field"><label>화면 밝기</label>${seg("appearance",[["auto","폰 설정 따라"],["light","밝게"],["dark","어둡게"]])}</div>
-  <div class="field"><label>글씨 크기</label>${seg("font",[["normal","보통"],["large","크게"],["xl","아주 크게"]])}</div>
   <div class="field"><label>운전 안내에 쓸 앱</label>${seg("nav",[["google","Google 지도"],["waze","Waze"],["apple","Apple 지도"]])}</div>
   <div class="field"><label>예약 도우미 링크</label>${seg("book",[["on","켜기"],["off","끄기"]])}</div>
   <div class="field"><label>카테고리 색</label>${Object.entries(CATS).map(([k,v])=>`<div class="catrow"><span class="cchip cat-${k}" style="align-self:flex-start">${v}</span><div class="dots">${SWATCH.map(c=>`<button type="button" class="dot" data-act="setCatColor" data-k="${k}" data-v="${c}" aria-label="${v} 색 ${c}" aria-pressed="${(prefs.cats||{})[k]===c}" style="background:${c}"></button>`).join("")}<button type="button" class="dot reset" data-act="setCatColor" data-k="${k}" data-v="" aria-pressed="${!(prefs.cats||{})[k]}" aria-label="${v} 기본 색">↺</button></div></div>`).join("")}</div>`}
@@ -1339,7 +1376,7 @@ async function sendJpgs(out,dayId){
   out.textContent="준비 중…";flushAll();const tag=await tripTag(curId);const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));const files=[];const stamp=Date.now().toString(36);
   for(const [evId,list] of Object.entries(L.photos)){if(dayId&&evDay[evId]!==dayId)continue;
     for(const p of list){if(p.by&&p.by!==L.me)continue;const r=await dbGet("photos",p.id).catch(()=>null);if(!r)continue;
-      const meta={tt:tag,ev:evId,id:p.id,by:L.me||""};if(p.cap)meta.cap=p.cap;
+      const meta={tt:tag,ev:evId,id:p.id,by:L.me||""};if(p.cap)meta.cap=p.cap;if(p.f)meta.f=p.f;
       files.push(new File([await jpgWithMeta(r.blob,meta)],`gotripj-${stamp}-${String(files.length+1).padStart(3,"0")}.jpg`,{type:"image/jpeg"}));out.textContent=`준비 중… ${files.length}장`}}
   if(!files.length){out.textContent="보낼 사진이 아직 없어요.";return}
   let ok=false;try{ok=!!(navigator.canShare&&navigator.canShare({files:files.slice(0,1)}))}catch(e){}
@@ -1357,7 +1394,7 @@ async function exportMine(out,incPriv,incOrig,dayId){
   const evDay=Object.fromEntries(T.events.map(e=>[e.id,e.dayId]));
   for(const [evId,list] of Object.entries(L.photos)){if(dayId&&evDay[evId]!==dayId)continue;
     for(const p of list){if(p.by&&p.by!==L.me)continue;const r=await dbGet("photos",p.id).catch(()=>null);if(!r)continue;
-      files.push({name:`photos/${p.id}.jpg`,blob:r.blob});const ent={id:p.id,evId};if(p.cap)ent.cap=p.cap;
+      files.push({name:`photos/${p.id}.jpg`,blob:r.blob});const ent={id:p.id,evId};if(p.cap)ent.cap=p.cap;if(p.f)ent.f=p.f;
       if(incOrig){const o=await dbGet("orig",p.id).catch(()=>null);if(o){const ext=(o.name.match(/\.[a-z0-9]+$/i)||[".jpg"])[0];ent.orig=`originals/${p.id}${ext}`;ent.origName=o.name;ent.origType=o.type;files.push({name:ent.orig,blob:o.blob});origN++}else origMissing++}
       photos.push(ent);out.textContent=`만드는 중… ${photos.length}장`}}
   let cover=null,coverOrig=null;
@@ -1394,8 +1431,8 @@ async function importPhotos(out){
     if(!/\.zip$/i.test(f.name)&&f.type!=="application/zip"){try{const b=new Uint8Array(await f.arrayBuffer());const mt=jpgMeta(b);
         if(!mt||!mt.id||!mt.ev){unknown++;continue}if(!(await sameTrip(mt))){errs.push(`${f.name}: 다른 여행의 사진이에요`);continue}
         if(!T.events.some(e=>e.id===mt.ev)){skipped++;continue}
-        const ex=Object.values(L.photos).flat().find(x=>x.id===mt.id);if(ex){if(mt.cap)ex.cap=mt.cap;skipped++;continue}
-        await dbPut("photos",{id:mt.id,blob:new Blob([b],{type:"image/jpeg"}),created:Date.now()});const ent={id:mt.id,by:mt.by||""};if(mt.cap)ent.cap=mt.cap;
+        const ex=Object.values(L.photos).flat().find(x=>x.id===mt.id);if(ex){if(mt.cap)ex.cap=mt.cap;if(mt.f&&!ex.f)ex.f=mt.f;skipped++;continue}
+        await dbPut("photos",{id:mt.id,blob:new Blob([b],{type:"image/jpeg"}),created:Date.now()});const ent={id:mt.id,by:mt.by||""};if(mt.cap)ent.cap=mt.cap;if(Array.isArray(mt.f))ent.f=mt.f;
         (L.photos[mt.ev]=L.photos[mt.ev]||[]).push(ent);added++}catch(e){errs.push(`${f.name}: 읽지 못했어요`)}continue}
     try{const en=await readZip(new Uint8Array(await f.arrayBuffer()));const mf=en.get("manifest.json");if(!mf)throw new Error("사진 보내기 파일이 아니에요");
       const man=JSON.parse(dec.decode(mf));if(man.app!=="tripnote-photos")throw new Error("사진 보내기 파일이 아니에요");
@@ -1403,9 +1440,9 @@ async function importPhotos(out){
       const have=new Set(Object.values(L.photos).flat().map(p=>p.id));
       if(man.from!==L.me){for(const p of man.photos){if(p.orig&&en.get(p.orig))origs.push({blob:new Blob([en.get(p.orig)],{type:p.origType||"image/jpeg"}),name:p.origName||p.orig.split("/").pop(),type:p.origType})}
         if(man.coverOrig&&en.get(man.coverOrig.file))origs.push({blob:new Blob([en.get(man.coverOrig.file)],{type:man.coverOrig.type||"image/jpeg"}),name:man.coverOrig.name,type:man.coverOrig.type})}
-      for(const p of man.photos){if(have.has(p.id)){if(p.cap){const ex=(L.photos[p.evId]||[]).find(x=>x.id===p.id);if(ex)ex.cap=p.cap}skipped++;continue}const data=en.get(`photos/${p.id}.jpg`);if(!data)continue;
+      for(const p of man.photos){if(have.has(p.id)){const ex=(L.photos[p.evId]||[]).find(x=>x.id===p.id);if(ex){if(p.cap)ex.cap=p.cap;if(p.f&&!ex.f)ex.f=p.f}skipped++;continue}const data=en.get(`photos/${p.id}.jpg`);if(!data)continue;
         if(!T.events.some(e=>e.id===p.evId)){skipped++;continue}
-        await dbPut("photos",{id:p.id,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});(L.photos[p.evId]=L.photos[p.evId]||[]).push(p.cap?{id:p.id,by:man.from,cap:p.cap}:{id:p.id,by:man.from});added++}
+        await dbPut("photos",{id:p.id,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});{const ent={id:p.id,by:man.from};if(p.cap)ent.cap=p.cap;if(Array.isArray(p.f))ent.f=p.f;(L.photos[p.evId]=L.photos[p.evId]||[]).push(ent)}added++}
       if(man.cover&&!L.cover){const data=en.get(`photos/${man.cover}.jpg`);if(data){await dbPut("photos",{id:man.cover,blob:new Blob([data],{type:"image/jpeg"}),created:Date.now()});L.cover=man.cover}}
       if(man.from!==L.me)(man.notes||[]).forEach(n=>{L.imported=(L.imported||[]).filter(x=>!(x.key===n.key&&x.by===man.from));L.imported.push({key:n.key,by:man.from,mood:n.mood,diary:n.diary});notesN++});
     }catch(e){errs.push(`${f.name}: ${e.message}`)}}
@@ -1552,7 +1589,7 @@ document.addEventListener("click",async ev=>{
     case "decor":document.querySelectorAll(".modal").forEach(x=>x.remove());decorModal();break;
     case "setTheme":{T.theme=b.dataset.v;patchTrip({theme:b.dataset.v});flushPatches();applyTheme();refreshDecor(b);break}
     case "setLang":prefs.lang=b.dataset.v;savePrefs();location.reload();break;
-    case "setPref":{const k=b.dataset.k,v=b.dataset.v;prefs[k]=v;savePrefs();refreshDecor(b);break}
+    case "setPref":{const k=b.dataset.k,v=b.dataset.v;prefs[k]=v;savePrefs();b.parentElement.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));refreshDecor(b);break}
     case "setCatColor":{const k=b.dataset.k,v=b.dataset.v;prefs.cats=Object.assign({},prefs.cats);if(v)prefs.cats[k]=v;else delete prefs.cats[k];savePrefs();refreshDecor(b);break}
     case "toggleWith":{const e=curEv();let ids=e.with||t.people.map(p=>p.id);ids=ids.includes(b.dataset.id)?ids.filter(i=>i!==b.dataset.id):[...ids,b.dataset.id];e.with=ids;patchEv(e.id,{with:ids});$("#withRow").innerHTML=withChips(t,e);break}
     case "vis":{if(b.closest(".modal"))break;const key=b.dataset.k;const shared=b.dataset.v==="1";if(shared&&!L.me){whoModal();break}
