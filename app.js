@@ -617,6 +617,13 @@ function pbCap(ctx,txt,x,y,w,h,u,font){if(!txt)return;font(Math.min(3,w/(18*u)*3
 const PB_FOCUS=[.5,.4];function focusOf(id){if(!id||!L)return null;for(const l of Object.values(L.photos||{})){const e=l.find(p=>p.id===id);if(e&&e.f)return e.f}return null}
 function pbFill(ctx,img,x,y,w,h,f){const iw=img.width,ih=img.height;const s=Math.max(w/iw,h/ih);const sw=w/s,sh=h/s;const [fx,fy]=f||PB_FOCUS;
   const sx=Math.min(Math.max(iw*fx-sw/2,0),iw-sw),sy=Math.min(Math.max(ih*fy-sh/2,0),ih-sh);ctx.drawImage(img,sx,sy,sw,sh,x,y,w,h)}
+// 표지용 짧은 날짜(11/05): 요일 빼고, 같은 해·같은 달은 한 번만 — 2026.07.10 – 07.11 / Jul 10 – 11, 2026
+function pbRange(a,b){if(!a)return "";const d1=new Date(a+"T12:00:00"),d2=new Date((b||a)+"T12:00:00");const p=n=>String(n).padStart(2,"0");
+  if(EN()){const M=d=>d.toLocaleString("en-US",{month:"short"});if(a===b||!b)return `${M(d1)} ${d1.getDate()}, ${d1.getFullYear()}`;
+    if(d1.getFullYear()!==d2.getFullYear())return `${M(d1)} ${d1.getDate()}, ${d1.getFullYear()} – ${M(d2)} ${d2.getDate()}, ${d2.getFullYear()}`;
+    return d1.getMonth()===d2.getMonth()?`${M(d1)} ${d1.getDate()} – ${d2.getDate()}, ${d1.getFullYear()}`:`${M(d1)} ${d1.getDate()} – ${M(d2)} ${d2.getDate()}, ${d1.getFullYear()}`}
+  const f1=`${d1.getFullYear()}.${p(d1.getMonth()+1)}.${p(d1.getDate())}`;if(a===b||!b)return f1;
+  return d1.getFullYear()!==d2.getFullYear()?`${f1} – ${d2.getFullYear()}.${p(d2.getMonth()+1)}.${p(d2.getDate())}`:`${f1} – ${p(d2.getMonth()+1)}.${p(d2.getDate())}`}
 function pbLines(ctx,text,maxW,maxLines){const out=[];
   for(const para of String(text||"").split("\n")){let line="";
     for(const tok of para.split(/(\s+)/)){if(!tok)continue;
@@ -719,20 +726,26 @@ async function pbDraw(t,pg,S,o,cover){
   const SERIF=`Georgia,"Times New Roman",${PB_FONT}`;const m=Math.round(S*.07),u=S/100;
   const F=(sz,w)=>x.font=`${w||400} ${Math.round(sz*u)}px ${PB_FONT}`;x.textBaseline="top";
   x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);
-  if(pg.type==="cover"){
-    if(cover){pbFill(x,cover,0,0,S,S,focusOf(o.coverId));const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
-    else{x.fillStyle=acc;x.fillRect(0,0,S,S);x.fillStyle="#fff"}
-    if(o.couple){const cp=o.couple;F(8,800);const ctl=pbLines(x,t.name,S-2*m,2).length;let y=Math.min(S*.6,S-m-(13+ctl*9.4+1.5+5+(cp.line?4.5:0))*u);x.font=`italic 400 ${Math.round(4*u)}px ${SERIF}`;x.globalAlpha=.9;
-      x.fillText(`${cp.a.label} & ${cp.b.label}`,m,y);x.globalAlpha=1;y+=6.5*u;
-      F(4.2,600);x.fillText(`${pName(t,cp.a.id)} & ${pName(t,cp.b.id)}`,m,y);y+=6.5*u;
-      F(8,800);y=pbText(x,pbLines(x,t.name,S-2*m,2),m,y,9.4*u)+1.5*u;
-      F(3.2,500);x.fillText(`${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`,m,y);y+=5*u;
-      if(cp.line){F(3.2,400);x.globalAlpha=.9;x.fillText(pbLines(x,cp.line,S-2*m,1)[0],m,y);x.globalAlpha=1}
-      return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.9))}
-    F(8.5,800);const tl=pbLines(x,t.name,S-2*m,2);let y=S-m-(5+tl.length*10+1.5+5.2+(t.people.length?5:0))*u;y=Math.min(y,S*.66);F(3.2,600);x.globalAlpha=.85;x.fillText(pbLines(x,(t.destination||"").toUpperCase(),S-2*m,1)[0]||"",m,y);x.globalAlpha=1;y+=5*u;
-    F(8.5,800);y=pbText(x,pbLines(x,t.name,S-2*m,2),m,y,10*u)+1.5*u;
-    F(3.4,500);x.fillText(`${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`,m,y);y+=5.2*u;
-    if(t.people.length){F(3.4,400);x.fillText(t.people.map(p=>p.name).join(" · "),m,y)}
+  if(pg.type==="cover"){ // 표지(11/05): 사진이 있으면 기본은 '아래 띠'(사진 위 2/3 + 아래 흰 띠에 제목), '사진 위'를 고르면 예전처럼 사진에 글씨. 색만이면 연한 색 + 같은 자리에 제목
+    const full=!!cover&&o.coverStyle==="full",BT=Math.round(S*.66),W=S-2*m,lt=!full;
+    if(full){pbFill(x,cover,0,0,S,S,focusOf(o.coverId));const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S)}
+    else{x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);if(cover)pbFill(x,cover,0,0,S,BT,focusOf(o.coverId));else{x.fillStyle=soft;x.fillRect(0,0,S,BT)}}
+    const C={eye:lt?mut:"#fff",title:lt?acc:"#fff",meta:lt?mut:"#fff",lab:lt?acc:"#fff",nm:lt?ink:"#fff"},range=pbRange(t.start,t.end),who=t.people.map(p=>p.name).join(" · ");
+    const rows=fz=>{const r=[];const tl=(()=>{F(fz,800);return pbLines(x,t.name,W,2)})();
+      if(o.couple){const cp=o.couple;r.push({f:()=>{x.font=`italic 400 ${Math.round(4*u)}px ${SERIF}`},t:[`${cp.a.label} & ${cp.b.label}`],lh:6.5*u,c:C.lab,a:lt?1:.9},{f:()=>F(4.2,600),t:[`${pName(t,cp.a.id)} & ${pName(t,cp.b.id)}`],lh:6.5*u,c:C.nm});
+        r.push({f:()=>F(fz,800),t:tl,lh:fz*1.15*u,c:C.title,gap:1.5*u},{f:()=>F(3.2,500),t:[range],lh:5*u,c:C.meta});if(cp.line)r.push({f:()=>F(3.2,400),t:[pbLines(x,cp.line,W,1)[0]],lh:4.5*u,c:C.meta,a:.9})}
+      else{if(t.destination)r.push({f:()=>F(3.2,600),t:[(()=>{F(3.2,600);return pbLines(x,t.destination.toUpperCase(),W,1)[0]})()],lh:5*u,c:C.eye,a:lt?1:.85});
+        r.push({f:()=>F(fz,800),t:tl,lh:fz*1.15*u,c:C.title,gap:1.5*u});
+        if(lt){F(3.4,500);r.push({f:()=>F(3.4,500),t:[pbLines(x,who?`${range}   ·   ${who}`:range,W,1)[0]],lh:5.2*u,c:C.meta})}
+        else{r.push({f:()=>F(3.4,500),t:[range],lh:5.2*u,c:C.meta});if(who)r.push({f:()=>F(3.4,400),t:[(()=>{F(3.4,400);return pbLines(x,who,W,1)[0]})()],lh:5*u,c:C.meta})}}
+      return r};
+    const hOf=r=>r.reduce((a,q)=>a+q.t.length*q.lh+(q.gap||0),0),bot=PB_BLURB?S-m*1.1:S-m,pad=4*u;
+    // 긴 제목은 글씨를 조금씩 줄여서 다 들어가게(6% 아래로는 안 줄이고 그때만 …)
+    let fz=o.couple?8:(lt?7.6:8.5),r=rows(fz);const fits=()=>{F(fz,800);return pbLines(x,t.name,W,3).length<=2&&(lt?hOf(r)<=bot-BT-2*pad:true)};
+    while(fz>6&&!fits()){fz-=.2;r=rows(fz)}
+    let y=lt?BT+pad+Math.max(0,(bot-BT-2*pad-hOf(r))/2):Math.min(bot-hOf(r),S*.62);
+    for(const q of r){q.f();x.fillStyle=q.c;x.globalAlpha=q.a||1;for(const line of q.t){x.fillText(line,m,y);y+=q.lh}x.globalAlpha=1;y+=q.gap||0}
+    if(o.couple)return await new Promise(res=>c.toBlob(b=>res(b),"image/jpeg",.9));
   }else if(pg.type==="day"){
     x.fillStyle=soft;x.fillRect(0,0,S,S);x.fillStyle=acc;x.fillRect(0,0,S,S*.012);
     let y=m*1.3;x.fillStyle=acc;F(3.6,700);x.fillText(`DAY ${pg.i+1}  ·  ${fmtDate(pg.d.date,true)}`,m,y);y+=7*u;
@@ -741,8 +754,8 @@ async function pbDraw(t,pg,S,o,cover){
       for(const n of pg.notes){const who=n.mine?pName(t,L.me):pName(t,n.by);F(3,600);x.fillStyle=acc;x.fillText(who||"",m,y);y+=4.4*u;
         x.fillStyle=ink;F(3.4,400);y=pbText(x,pbLines(x,[n.mood,n.diary].filter(Boolean).join("\n"),S-2*m,7),m,y,5*u)+3*u;if(y>S*.7)break}
       if(pg.list.length&&y<S*.86){x.fillStyle=mut;F(2.8,700);x.fillText(tt("이날 다닌 곳"),m,y);y+=4.6*u;
-        for(const {e,n} of pg.list){if(y>S-m-4*u)break;x.fillStyle=mut;F(2.9,500);x.fillText(e.start||"",m,y);x.fillStyle=ink;F(3.2,600);
-          const line=e.title+(n&&n.mood?`  — ${n.mood}`:"");x.fillText(pbLines(x,line,S-2*m-12*u,1)[0]||"",m+12*u,y);y+=5*u}}
+        for(const {e,n} of pg.list){if(y>S-m-4*u)break;x.fillStyle=acc;F(3.2,700);x.fillText("·",m+1*u,y);x.fillStyle=ink;F(3.2,600); // 시간은 빼고 순서만(11/05 — 대부분 시간을 정확히 안 넣어서 틀린 시간이 인쇄됨)
+          const line=e.title+(n&&n.mood?`  — ${n.mood}`:"");x.fillText(pbLines(x,line,S-2*m-5*u,1)[0]||"",m+5*u,y);y+=5*u}}
     }
   }else if(pg.type==="ring"){
     x.fillStyle="#FFFAF1";x.fillRect(0,0,S,S);x.strokeStyle=acc;x.globalAlpha=.25;x.setLineDash([.8*u,1.2*u]);x.lineWidth=.35*u;{const bi=PB_BLURB?m*.95:m*.5;rrect(x,bi,bi,S-2*bi,S-2*bi,3*u)}x.stroke();x.setLineDash([]);x.globalAlpha=1;
@@ -816,7 +829,7 @@ async function pbDraw(t,pg,S,o,cover){
     x.fillStyle=acc;x.font=`italic 400 ${Math.round(3.6*u)}px ${SERIF}`;x.textAlign="right";x.fillText(`— ${pg.from}`,S-m,S-m*1.3);x.textAlign="left";
   }else if(pg.type==="cpl"){
     const e=pg.e,cp=o.couple;let y=m*.9;
-    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}${e.start?"  ·  "+e.start:""}`,m,y);y+=4.2*u;
+    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}`,m,y);y+=4.2*u;
     x.fillStyle=ink;F(4.4,800);x.fillText(pbLines(x,e.title+(pg.cont?CONT():""),S-2*m,1)[0],m,y);y+=6*u;
     if(e.place&&!pg.cont){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,e.place,S-2*m,1)[0],m,y)}y+=5.5*u;
     const gap=Math.round(2.4*u),cw=(S-2*m-gap)/2,top=y,bottom=S-m*.8;
@@ -836,7 +849,7 @@ async function pbDraw(t,pg,S,o,cover){
     const W=S-2*m,top=m+9*u,H=Math.round(S*.58);x.fillStyle=acc;x.font=`italic 400 ${Math.round(6*u)}px ${SERIF}`;x.fillText("With",m,m);
     if(o.withImg)pbFill(x,o.withImg,m,top,W,H,focusOf(L.cover));else{x.fillStyle=soft;x.fillRect(m,top,W,H)}
     let y=top+H+4.5*u;x.fillStyle=ink;F(4,700);y=pbText(x,pbLines(x,t.people.map(p=>p.name).join(" · ")||t.name,W,2),m,y,5.6*u)+1.2*u;
-    x.fillStyle=mut;F(2.8,500);const ln=`${t.name}  ·  ${fmtDate(t.start,true)} — ${fmtDate(t.end,true)}`;x.fillText(pbLines(x,ln,W,1)[0],m,Math.min(y,PB_BLURB?S-m*1.45:S-m*.9))
+    x.fillStyle=mut;F(2.8,500);const ln=`${t.name}  ·  ${pbRange(t.start,t.end)}`;x.fillText(pbLines(x,ln,W,1)[0],m,Math.min(y,PB_BLURB?S-m*1.45:S-m*.9))
   }else if(pg.type==="blank"){
   }else if(pg.type==="memo"){
     x.fillStyle=acc;F(2.6,700);x.fillText(EN()?"NOTES":"메모",m,m*1.1);
@@ -869,7 +882,7 @@ async function pbDraw(t,pg,S,o,cover){
     else{const w=(W-gap)/2,h=(H-gap)/2;box(0,X,Y,w,h);box(1,X+w+gap,Y,w,h);box(2,X,Y+h+gap,w,h);box(3,X+w+gap,Y+h+gap,w,h)}
     imgs.forEach(im=>im&&im.close&&im.close());
     let y=Y+H+m*.45;const e=pg.e;
-    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}${e.start?"  ·  "+e.start:""}`,m,y);y+=4.2*u;
+    x.fillStyle=acc;F(2.7,700);x.fillText(`DAY ${pg.i+1}`,m,y);y+=4.2*u;
     x.fillStyle=ink;F(4,800);x.fillText(pbLines(x,e.title+(pg.cont?CONT():""),W,1)[0],m,y);y+=5.6*u;
     if(o.text&&!pg.cont){const w=withNames(t,e);const sub=[e.place,w&&w!=="모두"?(EN()?"With: ":"함께: ")+w:""].filter(Boolean).join("  ·  ");
       if(sub){x.fillStyle=mut;F(2.8,500);x.fillText(pbLines(x,sub,W,1)[0],m,y);y+=4.4*u}
@@ -909,7 +922,7 @@ function photobookModal(){const t=T;if(!t)return;
     ${t.people.length>=2?`<div class="field"><label for="pb-d">디자인</label><select class="inp" id="pb-d"><option value="basic">기본</option><option value="couple">커플 (Her · His)</option></select></div>
     <div id="pbCpl" hidden><p class="hint">일정마다 두 칸으로 나눠, 각자 찍은 사진과 각자 쓴 한 줄을 나란히 넣어요.</p>
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
-      <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div></div>`:""}
+      <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div><p class="warnline" id="pbCplWarn" hidden></p></div>`:""}
     <div class="field"><label for="pb-r">롤링페이퍼 모양</label><select class="inp" id="pb-r"><option value="ring">가운데 이름 + 둘레 쪽지</option><option value="bubble">말풍선 메시지</option><option value="stamp">우표 엽서</option><option value="card">편지 카드 + 마스킹테이프</option><option value="note">포스트잇</option></select></div>
     <div class="field" id="pbSpineBox" hidden><label for="pb-spine">책등 두께 (인치) <span class="hint" id="pbSpineInfo"></span></label><input class="inp mono" id="pb-spine" inputmode="decimal" placeholder="예: 0.056" style="max-width:140px">
       <p class="hint" id="pbSpineHelp"></p></div>
@@ -927,17 +940,19 @@ function photobookModal(){const t=T;if(!t)return;
     const w=L.cover?(EN()?" The group photo goes on page 1, “With”.":" 단체 사진은 1쪽 'With'에 들어가요."):"";
     box.innerHTML=cv.mode==="group"?`<p class="hint">${EN()?"The group photo from the Prep tab is the cover.":"준비 탭의 단체 사진이 표지가 돼요."}</p>`
       :cv.mode==="photo"?`<div class="row" style="gap:10px;flex-wrap:nowrap">${phImg(cv.id,"표지 사진",'class="pbcv-th"')}<p class="hint" style="margin:0">${EN()?"This photo is the cover.":"이 사진이 표지가 돼요."}${w}</p></div>`
-      :`<p class="hint">${EN()?"Theme color with the trip name only (change the color in ⋯ → Look).":"테마 색 바탕에 여행 이름만 들어가요 (색은 ⋯ → 꾸미기에서 바꿔요)."}${w}</p>`;hydrate()};
+      :`<p class="hint">${EN()?"Theme color with the trip name only (change the color in ⋯ → Look).":"테마 색 바탕에 여행 이름만 들어가요 (색은 ⋯ → 꾸미기에서 바꿔요)."}${w}</p>`;
+    if(cvSel().id)box.insertAdjacentHTML("beforeend",`<div class="row" style="gap:8px;margin-top:6px"><span class="hint" style="margin:0">제목 위치</span><div class="seg" role="group" id="pb-cvs">${[["band","사진 아래 띠"],["full","사진 위"]].map(([k,n])=>`<button type="button" data-s="${k}" aria-pressed="${(cv.style||"band")===k}">${n}</button>`).join("")}</div></div>`);hydrate()};
+  m.querySelector("#pbCvInfo").addEventListener("click",ev=>{const b=ev.target.closest("[data-s]");if(b)cvSet(Object.assign({},cv,{style:b.dataset.s}))});
   const cvSet=v=>{cv=v;L.pbCov=v;putLocal();cvShow();spineUpd()};
   m.querySelector("#pb-cv").onclick=ev=>{const b=ev.target.closest("button[data-v]");if(!b||b.disabled)return;const v=b.dataset.v;
-    if(v!=="photo"){cvSet({mode:v});return}
+    if(v!=="photo"){cvSet(Object.assign({},cv,{mode:v}));return}
     if(!allPh.length){toast(EN()?"No photos in this trip's plans yet":"아직 일정에 올린 사진이 없어요");return}
     const pk=modal(`<div class="card" style="max-height:88vh;overflow-y:auto"><h3>${EN()?"Pick a cover photo":"표지 사진 고르기"} <button type="button" class="btn sm" data-x="close">닫기</button></h3><p class="hint">이 여행 일정에 올린 사진이에요.</p><div class="covgrid">${allPh.map(id=>`<button type="button" data-id="${esc(id)}"${cv.mode==="photo"&&cv.id===id?' aria-pressed="true"':""}>${phImg(id,"사진",'loading="lazy"')}</button>`).join("")}</div></div>`);hydrate();
-    pk.addEventListener("click",e2=>{const c=e2.target.closest("[data-id]");if(c){cvSet({mode:"photo",id:c.dataset.id});pk.remove();return}if(e2.target.closest('[data-x="close"]'))pk.remove()})};
+    pk.addEventListener("click",e2=>{const c=e2.target.closest("[data-id]");if(c){cvSet(Object.assign({},cv,{mode:"photo",id:c.dataset.id}));pk.remove();return}if(e2.target.closest('[data-x="close"]'))pk.remove()})};
   const readO=out=>{const o={text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:m.querySelector("#pb-s").checked,single:m.querySelector("#pb-1").value};
     if(dSel&&dSel.value==="couple"){const g=k=>({id:m.querySelector("#pb-p"+k).value,label:m.querySelector("#pb-l"+k).value.trim()||(k==="a"?"Her":"His")});
       o.couple={a:g("a"),b:g("b"),line:m.querySelector("#pb-line").value.trim()};if(o.couple.a.id===o.couple.b.id){out.textContent="왼쪽과 오른쪽에 서로 다른 사람을 골라 주세요.";return null}}
-    const cs=cvSel();o.coverId=cs.id;o.withPg=cs.withPg;return o};
+    const cs=cvSel();o.coverId=cs.id;o.withPg=cs.withPg;o.coverStyle=cv.style||"band";return o};
   m.querySelector("#pbPv").onclick=async ev=>{const b=ev.currentTarget;const out=m.querySelector("#pbOut"),prev=m.querySelector("#pbPrev");const o=readO(out);if(!o)return;b.disabled=true;prev.innerHTML="";
     const bl=m.querySelector("#pb-f").value==="blurb";
     try{flushAll();let pl=pbPlan(t,o);if(bl)pl=blurbPages(pl);const cover=o.coverId?await pbImage(o.coverId,false):null;o.withImg=o.withPg?await pbImage(L.cover,false):null;PB_BLURB=bl;
@@ -954,7 +969,12 @@ function photobookModal(){const t=T;if(!t)return;
     if(v!=null&&(!inp.dataset.n||inp.dataset.n!=String(n)||!inp.value))inp.value=v;inp.dataset.n=n;
     m.querySelector("#pbSpineHelp").innerHTML=BLURB.known[n]!=null?(EN()?"Checked value — you can leave it.":"확인된 값이에요. 그대로 두면 돼요."):(EN()?`Open <a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb's calculator</a>, pick Small Square · Softcover · Standard · ${n} pages, and enter the "Gutter / Spine" width. Without it, only the interior PDF is made.`:`<a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb 계산기</a>에서 Small Square · Softcover · Standard · ${n}쪽을 넣고, "Gutter / Spine"의 앞 숫자를 적어 주세요. 비워 두면 속지만 만들어요.`)};
   ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});setTimeout(()=>{cvShow();spineUpd()},0);
-  const dSel=m.querySelector("#pb-d");if(dSel)dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple"};
+  const dSel=m.querySelector("#pb-d");
+  // 커플 디자인인데 한 사람 사진이 이 폰에 하나도 없으면 먼저 사진 모으기를 안내(11/05)
+  const cplWarn=()=>{const wEl=m.querySelector("#pbCplWarn");if(!wEl||!dSel||dSel.value!=="couple"){if(wEl)wEl.hidden=true;return}
+    const has=pid=>t.events.some(e=>photosOf(e.id).some(p=>(p.by||L.me)===pid));const miss=["a","b"].map(k=>m.querySelector("#pb-p"+k).value).filter(pid=>!has(pid)).map(pid=>pName(t,pid));
+    wEl.hidden=!miss.length;if(miss.length)wEl.textContent=EN()?`No photos from ${miss.join(" & ")} on this phone yet. Collect photos first (⋯ → Collect photos) so both sides get pictures.`:`${miss.join(", ")}의 사진이 이 폰에 아직 없어요. 먼저 ⋯ → '사진 모으기'로 합치면 양쪽에 사진이 들어가요.`};
+  if(dSel){dSel.onchange=()=>{m.querySelector("#pbCpl").hidden=dSel.value!=="couple";cplWarn()};["#pb-pa","#pb-pb"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",cplWarn)})}
   m.querySelector("#pbGo").onclick=async ev=>{const b=ev.currentTarget;b.disabled=true;const out=m.querySelector("#pbOut");
     const fmt=m.querySelector("#pb-f").value,S=fmt==="blurb"?BLURB.px:+m.querySelector("#pb-q").value;const o=readO(out);if(!o){b.disabled=false;return}o.orig=S>2000;
     try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=o.coverId?await pbImage(o.coverId,o.orig):null;o.withImg=o.withPg?await pbImage(L.cover,o.orig):null;const res=[];
