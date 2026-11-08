@@ -304,9 +304,37 @@ function navLinks(e){const r=routeOf(e);if(!r.dest)return `<p class="hint">장�
 function orderedEvents(t){const di=Object.fromEntries(t.days.map((d,i)=>[d.id,i]));return t.events.filter(e=>e.status!=="hold"&&di[e.dayId]!=null&&inEv(e,pf||(L&&L.me))).sort((a,b)=>(di[a.dayId]-di[b.dayId])||(a.start||"99").localeCompare(b.start||"99"))}
 function nextEvent(e){const list=orderedEvents(T);const i=list.findIndex(x=>x.id===e.id);for(let k=i+1;k<list.length;k++){if(list[k].status!=="done"&&routeOf(list[k]).dest)return list[k]}return null}
 function goNextHTML(e){const n=nextEvent(e);if(!n)return "";const r=routeOf(n);r.origin="";return `<a class="nextgo" href="${navURL(prefs.nav||"google",r)}" target="_blank" rel="noopener">🚗 다음 장소로 출발 · ${esc(n.title)}${n.dayId!==e.dayId?` <span class="hint">(${fmtDate(T.days.find(d=>d.id===n.dayId)?.date)})</span>`:""}</a>`}
-function dayRouteHTML(t,d){const rem=evsOf(t,d.id).filter(e=>inEv(e,pf||(L&&L.me))).filter(e=>e.status==="todo"&&routeOf(e).dest);if(rem.length<2)return "";
-  const pts=rem.slice(0,4).map(e=>routeOf(e).dest);const r={dest:pts[pts.length-1],origin:"",stops:pts.slice(0,-1)};
-  return `<a class="btn sm dayroute" href="${navURL("google",r,true)}" target="_blank" rel="noopener">🗺 남은 일정 ${pts.length}곳 한 번에 경로</a>`}
+// 하루 동선(11/08): 계획할 때는 그날 전체를 지도에 순서대로 이어서 보고, Claude에게 동선 정리를 맡겨요. 여행 당일엔 남은 일정 내비도 함께
+const dayMapURL=pts=>"https://www.google.com/maps/dir/"+pts.map(p=>encodeURIComponent(p).replace(/%20/g,"+")).join("/")+"/?hl="+(EN()?"en":"ko");
+function dayRouteHTML(t,d){const all=evsOf(t,d.id).filter(e=>e.status!=="hold");const pts=all.map(e=>routeOf(e).dest).filter(Boolean).filter((x,i,a)=>!i||x.toLowerCase()!==a[i-1].toLowerCase()).slice(0,10);const b=[];
+  if(pts.length>=2)b.push(`<a class="btn sm dayroute" href="${dayMapURL(pts)}" target="_blank" rel="noopener">${EN()?`🗺 Day route map (${pts.length} stops)`:`🗺 이날 동선 지도 (${pts.length}곳)`}</a>`);
+  if(!isViewer()&&all.length>=3)b.push(`<button type="button" class="btn sm dayroute" data-act="routeFix">🧭 Claude로 동선 정리</button>`);
+  if(d.date===todayISO()){const rem=all.filter(e=>inEv(e,pf||(L&&L.me))&&e.status==="todo"&&routeOf(e).dest);if(rem.length>=2){const ps=rem.slice(0,4).map(e=>routeOf(e).dest);
+    b.push(`<a class="btn sm dayroute" href="${navURL("google",{dest:ps[ps.length-1],origin:"",stops:ps.slice(0,-1)},true)}" target="_blank" rel="noopener">${EN()?`🚗 Route for ${ps.length} remaining stops`:`🚗 남은 일정 ${ps.length}곳 경로`}</a>`)}}
+  return b.length?`<div class="row dayroutes" style="gap:6px;flex-wrap:wrap;margin-top:6px">${b.join("")}</div>`:""}
+function routeFixModal(){const t=T;const d=t&&t.days.find(x=>x.id===curDay);if(!d)return;const evs=evsOf(t,d.id).filter(e=>e.status!=="hold");const idx=t.days.indexOf(d);const en=EN();
+  const line=(e,i)=>`${i+1}. ${e.start||"--:--"}${e.end?"–"+e.end:""} | ${e.cat==="move"?(en?"[move] ":"[이동] "):""}${e.title}${e.place&&e.place!==e.title?` | ${en?"place":"장소"}: ${e.place}`:""}${e.address?` | ${en?"address":"주소"}: ${e.address}`:""}${e.memo?` | ${en?"memo":"메모"}: ${String(e.memo).replace(/\s+/g," ").slice(0,120)}`:""}`;
+  const req=en?`GoTripJ route request\nTrip: ${t.destination||t.name} · Day ${idx+1} (${d.date})\nHere is the plan for this day. Please keep the numbers.\n${evs.map(line).join("\n")}\n\nPlease:\n- Reorder so places in the same area are grouped and we don't go back and forth.\n- Keep the times of fixed things (hotel check-in/out, reservations, flights, shows, tours) as they are.\n- Set new start/end times allowing for travel and time spent.\n- [move] items are travel between places: put them between the right places in the new order and fix their times. If one isn't needed any more, add "drop":true; you may also give a new "title" for [move] items.\n- Explain briefly, by neighborhood, why you changed the order.\n- At the end, add this JSON (all numbers above, in the new order):\n{"type":"gotripj-route","order":[{"n":3,"start":"09:00","end":"10:30"},{"n":4,"start":"10:30","end":"11:00","title":"Drive to B"},{"n":7,"drop":true}]}`
+    :`같이가J 동선 정리 요청\n여행: ${t.destination||t.name} · Day ${idx+1} (${d.date})\n아래는 이날 일정이에요. 번호는 그대로 써 주세요.\n${evs.map(line).join("\n")}\n\n부탁:\n- 같은 동네끼리 묶어서 왔다 갔다 하지 않게 순서를 바꿔 주세요.\n- 숙소 체크인·체크아웃, 예약, 항공, 공연, 투어처럼 시간이 정해진 일정은 시간을 그대로 두세요.\n- 이동 시간과 머무는 시간을 생각해서 새 시작·끝 시간을 정해 주세요.\n- [이동] 일정은 장소 사이를 오가는 이동이에요. 새 순서에 맞게 장소 사이에 두고 시간을 맞춰 주세요. 필요 없어진 이동은 "drop":true로 표시하고, [이동] 일정은 새 "title"을 줘도 돼요.\n- 왜 이렇게 바꿨는지 동네 기준으로 짧게 설명해 주세요.\n- 마지막에 아래 형식의 JSON을 꼭 붙여 주세요(위의 번호 전부, 새 순서대로):\n{"type":"gotripj-route","order":[{"n":3,"start":"09:00","end":"10:30"},{"n":4,"start":"10:30","end":"11:00","title":"B로 이동"},{"n":7,"drop":true}]}`;
+  const m=modal(`<div class="card" style="max-height:92vh;overflow-y:auto"><h3>🧭 ${en?`Day ${idx+1} route`:`Day ${idx+1} 동선 정리`} <button type="button" class="btn sm" data-act="closeModal">닫기</button></h3>
+    <p class="hint">① 요청을 복사해서 Claude 채팅에 붙여 넣어요. ② Claude의 답을 통째로 복사해서 아래에 붙여 넣어요. 순서와 시간만 바뀌고, 기록·사진·메모는 그대로예요.</p>
+    <button type="button" class="btn primary" id="rfCopy">① 동선 정리 요청 복사</button>
+    <div class="field" style="margin-top:12px"><label for="rfIn">② Claude 답 붙여넣기</label><textarea class="inp mono" id="rfIn" rows="6" style="font-size:14px" placeholder='{"type":"gotripj-route", ...}'></textarea></div>
+    <div id="rfOut"></div><div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="rfChk">순서 미리 보기</button></div></div>`);
+  m.querySelector("#rfCopy").onclick=async()=>{const ok=await navigator.clipboard?.writeText(req).then(()=>true,()=>false);toast(ok?"복사했어요. Claude 채팅에 붙여 넣으세요":"복사하지 못했어요")};
+  const out=m.querySelector("#rfOut");let plan=null,backup=null;
+  const parse=txt=>{txt=String(txt||"");const k=txt.indexOf('"gotripj-route"');if(k>=0){const a=txt.lastIndexOf("{",k);txt=txt.slice(a)}const o=parseLoose(txt);const ord=Array.isArray(o)?o:o.order;if(!Array.isArray(ord))throw new Error("no order");
+    const tm=v=>/^\d{1,2}:\d{2}$/.test(String(v||"").trim())?String(v).trim().padStart(5,"0"):"";const seen=new Set();
+    return ord.map(x=>({n:+x.n,start:tm(x.start),end:tm(x.end),drop:x.drop===true,title:typeof x.title==="string"?x.title.trim().slice(0,80):""})).filter(x=>x.n>=1&&x.n<=evs.length&&!seen.has(x.n)&&seen.add(x.n))};
+  m.querySelector("#rfChk").onclick=()=>{try{plan=parse(m.querySelector("#rfIn").value)}catch(e){plan=null}
+    if(!plan||!plan.length){out.innerHTML=`<p class="warnline">읽을 수 없어요. Claude 답 맨 끝의 JSON까지 통째로 붙여 넣어 주세요.</p>`;return}
+    const miss=evs.length-plan.length;
+    out.innerHTML=`<p class="hint">${en?`New order${miss?` (${miss} not in the answer stay as they are)`:""}:`:`이 순서로 바뀌어요${miss?` (답에 없는 일정 ${miss}개는 그대로)`:""}:`}</p><ol class="rflist">${plan.map(x=>{const e=evs[x.n-1];const tl=e.cat==="move"&&x.title?x.title:e.title;return x.drop?`<li style="opacity:.6"><s>${esc(tl)}</s> → ${en?"moved to Hold":"보류함으로"}</li>`:`<li><b>${esc(x.start||e.start||"")}${x.end?"–"+esc(x.end):""}</b> ${esc(tl)}</li>`}).join("")}</ol>
+      <div class="row" style="justify-content:flex-end"><button type="button" class="btn primary" id="rfGo">이 순서로 바꾸기</button></div>`;
+    out.querySelector("#rfGo").onclick=()=>{backup=evs.map(e=>({id:e.id,start:e.start||"",end:e.end||"",title:e.title,status:e.status}));
+      plan.forEach(x=>{const e=evs[x.n-1];const p={};if(x.drop&&e.cat==="move"){e.status="hold";p.status="hold"}else{if(x.start){e.start=x.start;p.start=x.start}if(x.end){e.end=x.end;p.end=x.end}if(x.title&&e.cat==="move"){e.title=x.title;p.title=x.title}}if(Object.keys(p).length)patchEv(e.id,p)});flushPatches();render();
+      out.innerHTML=`<p class="hint">바꿨어요. 일정 화면에서 확인해 보세요.</p><div class="row" style="justify-content:flex-end"><button type="button" class="btn" id="rfUndo">되돌리기</button><button type="button" class="btn primary" data-act="closeModal">닫기</button></div>`;
+      out.querySelector("#rfUndo").onclick=()=>{backup.forEach(b=>{const e=t.events.find(x=>x.id===b.id);if(!e)return;Object.assign(e,{start:b.start,end:b.end,title:b.title,status:b.status});patchEv(e.id,{start:b.start,end:b.end,title:b.title,status:b.status})});flushPatches();render();out.innerHTML=`<p class="hint">원래대로 돌렸어요.</p>`;toast("원래대로 돌렸어요")}}}}
 function stopsHTML(e){return (e.stops||[]).map((x,i)=>`<div class="addline"><input class="inp" data-stop="${i}" value="${esc(x)}" placeholder="경유지 ${i+1} (주유소, 휴게소 등)"><button type="button" class="btn sm ghost" data-act="rmStop" data-i="${i}" aria-label="경유지 삭제">✕</button></div>`).join("")}
 const catPick=(sel,act)=>`<div class="catpick" role="group" aria-label="카테고리">${Object.entries(CATS).map(([k,v])=>`<button type="button" class="cat-${k}" data-act="${act}" data-c="${k}" aria-pressed="${sel===k}">${v}</button>`).join("")}</div>`;
 const legend=()=>`<div class="legend">${Object.entries(CATS).map(([k,v])=>`<span class="cat-${k}"><i></i>${v}</span>`).join("")}</div>`;
@@ -484,7 +512,13 @@ async function blurbCover(t,o,cover,n,sp){const H=BLURB.px,Win=BLURB.coverW(n,sp
   x.fillStyle="#5E6B73";x.font=`500 ${Math.round(2.6*u)}px ${PB_FONT}`;x.fillText(pbLines(x,t.name||"",H*.7,1)[0]||"",cx,H*.42+7*u);
   x.font=`400 ${Math.round(2.2*u)}px ${PB_FONT}`;x.fillText(EN()?"A travel photo book made with GoTripJ":"같이가J로 만든 여행 사진첩",cx,H*.42+14*u); // 뒤표지 아래쪽은 Blurb 로고 자리라 비워 둬요
   const blob=await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.95));return {blob,w:W,h:H,pw:Math.round(Win*72*1000)/1000,ph:BLURB.pt,Win,sp}}
+// 20쪽이 모자라면 메모 쪽보다 먼저 사진을 펼쳐요(11/08): 사진이 가장 많은 쪽부터 — 처음엔 ⭐를 꽉 찬 한 쪽으로 꺼내고, 그다음엔 반으로 나눠요
+function pbSpread(body,need){let k=0;while(k<need){let bi=-1,bn=1;body.forEach((p,i)=>{if(p.type==="photos"&&p.ph.length>bn){bn=p.ph.length;bi=i}});if(bi<0)break;
+    const p=body[bi];let a,b;if(p.star!==false&&!p.split){a={...p,ph:[p.ph[0]],big:true,split:true};b={...p,ph:p.ph.slice(1),notes:[],cont:true,star:false,split:true}}
+    else{const h=Math.ceil(p.ph.length/2);a={...p,ph:p.ph.slice(0,h),star:false,split:true};b={...p,ph:p.ph.slice(h),notes:[],cont:true,star:false,split:true}}
+    body.splice(bi,1,a,b);k++}return body}
 function blurbPages(pl){const body=pl.filter(p=>p.type!=="cover");const end=body.length&&body[body.length-1].type==="end"?body.pop():null;
+  {const short=BLURB.base-(body.length+(end?1:0));if(short>0)pbSpread(body,short)}
   let n=body.length+(end?1:0);while(n<BLURB.base){body.push({type:"memo"});n++}if(end)body.push(end);
   if(body.length%2)body.push({type:"blank"});return body}
 function printHelpHTML(fmt,pages){if(!bookOn())return "";const n=Math.max(BLURB.base,pages+(pages%2)),ex=(n-BLURB.base)*BLURB.per;
@@ -860,7 +894,7 @@ async function pbDraw(t,pg,S,o,cover){
     const imgs=[];for(const id of pg.ph)imgs.push(await pbImage(id,o.orig));
     const box=(i,bx,by,bw,bh)=>{const im=imgs[i];if(im)pbFill(x,im,bx,by,bw,bh,focusOf(pg.ph[i]));else{x.fillStyle="#E6EBEE";x.fillRect(bx,by,bw,bh)}if(o.text)pbCap(x,phCap(pg.ph[i]),bx,by,bw,bh,u,F)};
     const n=imgs.length,X=m,Y=m;
-    if(n===1&&o.single!=="full"){const im=imgs[0],rnd=prng(hashStr(pg.ph[0]));
+    if(n===1&&o.single!=="full"&&!pg.big){const im=imgs[0],rnd=prng(hashStr(pg.ph[0]));
       x.fillStyle=soft;x.fillRect(0,0,S,S);
       const ar=im?Math.min(1.35,Math.max(.75,im.width/im.height)):1,pad=3*u,bot=o.text&&phCap(pg.ph[0])?13*u:9*u;
       let pw=W*.74-2*pad,ph=pw/ar;const maxPh=H*.9-pad-bot;if(ph>maxPh){ph=maxPh;pw=ph*ar}
@@ -1594,6 +1628,7 @@ document.addEventListener("click",async ev=>{
     case "addStop":{const e=curEv();e.stops=[...(e.stops||[]),""];patchEv(e.id,{stops:e.stops});$("#stopsBox").innerHTML=stopsHTML(e);const ins=document.querySelectorAll("#stopsBox input");ins[ins.length-1]?.focus();break}
     case "rmStop":{const e=curEv();e.stops=(e.stops||[]).filter((_,i)=>i!==+b.dataset.i);patchEv(e.id,{stops:e.stops});$("#stopsBox").innerHTML=stopsHTML(e);$("#navRow").innerHTML=navLinks(e);break}
     case "dayEmoji":emojiModal(curDay);break;
+    case "routeFix":routeFixModal();break;
     case "roles":rolesModal();break;
     case "pf":setPf(b.dataset.id);render();break;
     case "setRole":{if(!isOwner())break;const pid=b.dataset.p,r=b.dataset.r;const u=uidsOf(pid);if(!u.length)break;
