@@ -493,16 +493,38 @@ function evHTML(e,showDay){
 // 속지 규격: 재단 후 6.75×6.63in + 위·아래·바깥쪽 재단 여유 0.125in → 6.875×6.875in 정사각 (Blurb 계산기로 최종 확인 필요)
 // Blurb 계산기 확인값(2026-11-02, Small Square · Softcover · Standard): 속지 PDF 6.875×6.875, 재단 6.75×6.625, 재단 여유 위·아래·바깥 0.125,
 // 안전 여백 위·아래·바깥 0.25 / 제본 쪽 0.5. 표지 PDF = 6.75×2 + 책등 + 0.25 (× 6.875). 책등: 20쪽 0.056, 60쪽 0.181 → 0.003125×쪽수 − 0.0065
-const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 10월",inch:6.875,trimW:6.75,gutter:.0625,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)},
+// 종이(11/08): Standard와 Premium(Lustre·Matte — 계산기에서 한 항목). 책등 계단 높이(4·9·13pt = 0.056·0.125·0.181in)는 같고 넘어가는 쪽수만 달라요. 하드커버는 아직(계산기 값 받는 중)
+const BPAPER={std:{ko:"Standard",en:"Standard",base:17,per:.26,sp:n=>n<=28?.056:n<=56?.125:.181},prem:{ko:"Premium (Lustre 또는 Matte)",en:"Premium (Lustre or Matte)",base:22,per:.40,sp:n=>n<=20?.056:n<=40?.125:.181}};
+// 하드커버 ImageWrap(계산기 11/08, pt): 표지 1083×549, 감싸는 여백 22, 판지 503×505, 책등 33 — Standard 20~60쪽 모두 같음(판지가 두께를 정해서). 홈(hinge) 값은 계산기에 없어서 책등 옆 27pt(0.375in)를 글씨 금지로 둠
+// Premium 하드커버(계산기 11/08): 20~50쪽 33pt, 52~60쪽 41pt (20~60쪽 전부 확인)
+const BHARD={wrap:22,boardW:503,boardH:505,base:{std:32,prem:37},hinge:27,sp:{std:n=>n>=20&&n<=60?33:null,prem:n=>n>=20&&n<=50?33:n>=52&&n<=60?41:null}};
+const bCover=()=>prefs.pbCover==="hard"?"hard":"soft";const bCoverName=k=>(k||bCover())==="hard"?(EN()?"Hardcover, ImageWrap":"하드커버 (ImageWrap)"):(EN()?"Softcover":"소프트커버");
+const bPaper=()=>BPAPER[prefs.pbPaper]?prefs.pbPaper:"std";const bPaperName=k=>EN()?BPAPER[k].en:BPAPER[k].ko;
+const BLURB={soft:17,hard:32,per:.26,base:20,ship:7,pdf:4.99,asOf:"2026년 11월",inch:6.875,trimW:6.75,gutter:.0625,get pt(){return Math.round(this.inch*72)},get px(){return Math.round(this.inch*300)},
   // 책등은 쪽수에 따라 계단처럼 바뀌어요(20~28쪽 0.056, 30~56쪽 0.125, 58~60쪽 0.181 — 공식으로는 안 맞음). 계산기에서 확인한 값만 씀(2026-11-02 20~60쪽 전부 확인)
   known:(()=>{const k={};for(let n=20;n<=60;n+=2)k[n]=n<=28?.056:n<=56?.125:.181;return k})(),
-  spine(n){const k=this.known[n];if(k!=null)return k;const v=(prefs.spines||{})[n];return v!=null?+v:null},coverW(n,sp){return Math.round((this.trimW*2+sp+0.25)*1000)/1000}};
+  isKnown(n,pp,ck){if((ck||bCover())==="hard")return n%2===0&&!!BHARD.sp[pp||"std"]&&BHARD.sp[pp||"std"](n)!=null;return n>=20&&n<=60&&n%2===0&&!!BPAPER[pp||"std"]},
+  spine(n,pp,ck){pp=pp||"std";ck=ck||bCover();if(ck==="hard"){const hp=n%2===0&&BHARD.sp[pp]?BHARD.sp[pp](n):null;if(hp!=null)return Math.round(hp/72*1000)/1000;const v=(prefs.spines||{})["hard:"+pp+":"+n];return v!=null?+v:null}if(this.isKnown(n,pp))return BPAPER[pp].sp(n);const sp=prefs.spines||{};const v=sp[pp+":"+n]!=null?sp[pp+":"+n]:(pp==="std"?sp[n]:null);return v!=null?+v:null},coverW(n,sp){return Math.round((this.trimW*2+sp+0.25)*1000)/1000}};
 async function blobToCanvas(blob,W,H){const im=await createImageBitmap(blob);const c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");return {c,x,im}}
 // 제본 쪽 안전 여백(0.5in)을 지키려고 내용을 제본 반대쪽으로 조금 밀어요. 비는 쪽은 가장자리 색으로 채워요.
 async function gutterShift(blob,S,dir){const G=Math.round(BLURB.gutter/BLURB.inch*S);const {c,x,im}=await blobToCanvas(blob,S,S);
   if(dir>0){x.drawImage(im,0,0,S-G,S,G,0,S-G,S);x.drawImage(im,0,0,1,S,0,0,G,S)}else{x.drawImage(im,G,0,S-G,S,0,0,S-G,S);x.drawImage(im,S-1,0,1,S,S-G,0,G,S)}
   im.close&&im.close();return await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.95))}
-async function blurbCover(t,o,cover,n,sp){const H=BLURB.px,Win=BLURB.coverW(n,sp),W=Math.round(Win*300);
+async function blurbHardCover(t,o,cover,sp){const P=v=>Math.round(v*300/72),spPt=Math.abs(sp*72-Math.round(sp*72))<0.2?Math.round(sp*72):Math.round(sp*72*100)/100,wr=BHARD.wrap,bw=BHARD.boardW,WPt=2*wr+2*bw+spPt,HPt=2*wr+BHARD.boardH;
+  const W=P(WPt),H=P(HPt),c=document.createElement("canvas");c.width=W;c.height=H;const x=c.getContext("2d");
+  const th=o.couple?["#B5527A","#FBEAF1"]:(THEMES[t.theme]||THEMES.teal).l;x.fillStyle=th[1];x.fillRect(0,0,W,H);
+  // 앞표지: 판지+감싸는 여백까지 덮는 정사각(높이 전체)으로 그리고 오른쪽 끝에 맞춰요. 왼쪽은 책등 쪽으로 조금 넘어가는데 책등 색이 덮어요
+  PB_HC={hinge:BHARD.hinge/HPt};let front;try{front=await pbDraw(t,{type:"cover"},H,o,cover)}finally{PB_HC=null}
+  const im=await createImageBitmap(front);x.drawImage(im,W-H,0,H,H);im.close&&im.close();
+  const sx=P(wr+bw),sw=P(spPt);x.fillStyle=th[0];x.fillRect(sx,0,sw,H);
+  // 뒤표지: 판지 가운데, 아래쪽은 Blurb 로고 자리라 비워요
+  const u=P(BHARD.boardH)/100,cx=P(wr+bw/2),cy=P(wr+BHARD.boardH*.42);x.textAlign="center";x.textBaseline="middle";
+  x.fillStyle=th[0];x.font=`800 ${Math.round(4.2*u)}px ${PB_FONT}`;x.fillText(EN()?"GoTripJ":"같이가J",cx,cy);
+  x.fillStyle="#5E6B73";x.font=`500 ${Math.round(2.6*u)}px ${PB_FONT}`;x.fillText(pbLines(x,t.name||"",P(bw)*.75,1)[0]||"",cx,cy+7*u);
+  x.font=`400 ${Math.round(2.2*u)}px ${PB_FONT}`;x.fillText(EN()?"A travel photo book made with GoTripJ":"같이가J로 만든 여행 사진첩",cx,cy+14*u);
+  const blob=await new Promise(r=>c.toBlob(b=>r(b),"image/jpeg",.95));const Win=Math.round(WPt/72*1000)/1000,Hin=Math.round(HPt/72*1000)/1000;
+  return {blob,w:W,h:H,pw:Math.round(WPt*1000)/1000,ph:HPt,Win,Hin,sp,hard:true}}
+async function blurbCover(t,o,cover,n,sp){if(bCover()==="hard")return blurbHardCover(t,o,cover,sp);const H=BLURB.px,Win=BLURB.coverW(n,sp),W=Math.round(Win*300);
   const front=await pbDraw(t,{type:"cover"},H,o,cover);const {c,x,im}=await blobToCanvas(front,W,H);
   const th=o.couple?["#B5527A","#FBEAF1"]:(THEMES[t.theme]||THEMES.teal).l;
   x.fillStyle=th[1];x.fillRect(0,0,W,H);x.drawImage(im,W-H,0,H,H);im.close&&im.close();
@@ -521,12 +543,14 @@ function blurbPages(pl){const body=pl.filter(p=>p.type!=="cover");const end=body
   {const short=BLURB.base-(body.length+(end?1:0));if(short>0)pbSpread(body,short)}
   let n=body.length+(end?1:0);while(n<BLURB.base){body.push({type:"memo"});n++}if(end)body.push(end);
   if(body.length%2)body.push({type:"blank"});return body}
-function printHelpHTML(fmt,pages){if(!bookOn())return "";const n=Math.max(BLURB.base,pages+(pages%2)),ex=(n-BLURB.base)*BLURB.per;
-  const soft=Math.round(BLURB.soft+ex),hard=Math.round(BLURB.hard+ex);
-  const price=`<p class="hint">이 사진첩(${pages}쪽) 예상 가격: 소프트커버 약 $${soft} · 하드커버 약 $${hard} + PDF 업로드 $${BLURB.pdf} + 배송 $${BLURB.ship}부터. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)</p>`;
+// 예상 가격(11/08): PDF 업로드 $4.99는 꼭 붙으니 합계에 넣고, 무엇이 들었는지 옆에 적어요
+function blurbPrice(pages,pp,ck){pp=pp||"std";const P=BPAPER[pp];const n=Math.max(BLURB.base,pages+(pages%2));const base=(ck||bCover())==="hard"?BHARD.base[pp]:P.base;const book=Math.round((base+(n-BLURB.base)*P.per)*100)/100;return {book,total:Math.round((book+BLURB.pdf)*100)/100}}
+function blurbPriceLine(pages,pp,ck){ck=ck||bCover();const r=blurbPrice(pages,pp,ck);const f=v=>"$"+v.toFixed(2);return EN()?`Estimate for this book (${pages} pages, ${bCoverName(ck).toLowerCase()}, ${bPaperName(pp||"std")}): <b>${f(r.total)}</b> (book ${f(r.book)} + PDF upload ${f(BLURB.pdf)}) + shipping`:`이 책(${pages}쪽 · ${bCoverName(ck)} · ${bPaperName(pp||"std")}) 예상 <b>${f(r.total)}</b> (책 ${f(r.book)} + PDF 업로드 ${f(BLURB.pdf)}) + 배송비`}
+function printHelpHTML(fmt,pages,pp){if(!bookOn())return "";pp=pp||"std";
+  const price=`<p class="hint" data-nt>${blurbPriceLine(pages,pp)}. ${EN()?`Shipping from $${BLURB.ship}: standard takes about 2–3 weeks, faster ($12–25) about 1–2 weeks. Several copies in one order pay shipping once. (Prices as of Nov 2026 — check the order page.)`:`배송은 $${BLURB.ship}부터예요. 일반 배송은 받기까지 약 2~3주, 빠른 배송($12~25)은 1~2주 걸려요. 여러 권을 한 번에 주문하면 배송비는 한 번만 내요. (${BLURB.asOf} 가격 기준, 주문 화면에서 확인하세요)`}</p>`;
   const disc=`<p class="hint">${hasAff()?"제휴 링크예요. 이 링크로 주문하면 같이가J가 수수료를 받을 수 있어요. 가격은 똑같아요.":"인쇄 회사 사이트로 바로 연결돼요. 같이가J는 이 링크로 돈을 받지 않아요."}</p>`;
   if(fmt==="blurb")return `<div class="printhelp"><b>🖨 Blurb에서 책으로 만들기</b>
-    <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb 열기</span><small>PDF로 만들기(PDF to Book) → Photo Book → Small Square → <b>Softcover · Standard</b>를 고르고, ①을 속지(interior), ②를 표지(cover)로 올려요. 쪽수는 ①의 쪽수와 같게 넣어요. 컴퓨터나 폰 크롬에서 해요(Blurb 앱은 PDF 업로드가 안 돼요).</small></a>${price}${disc}</div>`;
+    <a href="${bkURL("print",{to:"blurb"})}" target="_blank" rel="noopener"><span>Blurb 열기</span><small>PDF로 만들기(PDF to Book) → Photo Book → Small Square → <b>${EN()?(bCover()==="hard"?"Hardcover, ImageWrap":"Softcover")+" · paper "+bPaperName(pp):(bCover()==="hard"?"Hardcover, ImageWrap":"Softcover")+" · 종이 "+bPaperName(pp)}</b>를 고르고, ①을 속지(interior), ②를 표지(cover)로 올려요. 쪽수는 ①의 쪽수와 같게 넣어요. 컴퓨터나 폰 크롬에서 해요(Blurb 앱은 PDF 업로드가 안 돼요).</small></a>${price}${disc}</div>`;
   if(fmt==="jpg")return `<div class="printhelp"><b>🖨 8×8 사진첩으로 인쇄하기</b>
     <a href="${bkURL("print",{to:"shutterfly"})}" target="_blank" rel="noopener"><span>Shutterfly</span><small>8×8 사진첩을 고르고, 받은 페이지 사진을 한 쪽에 한 장씩 '꽉 채우기'로 넣어요. 크기가 딱 맞아 잘리지 않아요.</small></a>
     <a href="${bkURL("print",{to:"snapfish"})}" target="_blank" rel="noopener"><span>Snapfish</span><small>8×8 사진첩에 같은 방법으로 넣어요. 할인 행사가 잦아요.</small></a>
@@ -708,7 +732,7 @@ function stickerSet(t,o){
   else if(/캠핑|camp|산|mountain|hike|하이킹/.test(s))base=["⛺","🌲","🏔️","🔥","🌙","⭐","🍂","🥾"];
   if(o.couple)base=["💕","💌","🌹","✨","🥂","💗",...base.slice(0,3)];
   return [...new Set([...day,...base])]}
-let PB_BLURB=false; // Blurb 인쇄용으로 그릴 때 안전 여백(재단선에서 0.25in, 제본 쪽 0.5in) 안으로 당겨요
+let PB_BLURB=false,PB_HC=null; // PB_HC: 하드커버 앞표지를 그릴 때 {hinge: 책등 쪽 홈 여백 비율} // Blurb 인쇄용으로 그릴 때 안전 여백(재단선에서 0.25in, 제본 쪽 0.5in) 안으로 당겨요
 function placeStickers(x,S,occ,set,seed,count){const u=S/100,m=S*(PB_BLURB?.1:.05),rnd=prng(seed),put=[];
   const hit=(r,p)=>occ.concat(put).some(o=>r.x<o.x+o.w+p&&r.x+r.w+p>o.x&&r.y<o.y+o.h+p&&r.y+r.h+p>o.y);
   for(let tries=0;tries<220&&put.length<count;tries++){const sz=(6.5+rnd()*4)*u;const r={x:m+rnd()*(S-2*m-sz),y:m+rnd()*(S-2*m-sz),w:sz,h:sz};
@@ -761,7 +785,7 @@ async function pbDraw(t,pg,S,o,cover){
   const F=(sz,w)=>x.font=`${w||400} ${Math.round(sz*u)}px ${PB_FONT}`;x.textBaseline="top";
   x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);
   if(pg.type==="cover"){ // 표지(11/05): 사진이 있으면 기본은 '아래 띠'(사진 위 2/3 + 아래 흰 띠에 제목), '사진 위'를 고르면 예전처럼 사진에 글씨. 색만이면 연한 색 + 같은 자리에 제목
-    const full=!!cover&&o.coverStyle==="full",BT=Math.round(S*.66),W=S-2*m,lt=!full;
+    const full=!!cover&&o.coverStyle==="full",BT=Math.round(S*.66),mL=m+(PB_HC?Math.round(PB_HC.hinge*S):0),mR=m+(PB_HC?Math.round(S*.015):0),W=S-mL-mR,lt=!full;
     if(full){pbFill(x,cover,0,0,S,S,focusOf(o.coverId));const g=x.createLinearGradient(0,S*.45,0,S);g.addColorStop(0,"rgba(0,0,0,0)");g.addColorStop(1,"rgba(0,0,0,.72)");x.fillStyle=g;x.fillRect(0,0,S,S)}
     else{x.fillStyle="#FFFFFF";x.fillRect(0,0,S,S);if(cover)pbFill(x,cover,0,0,S,BT,focusOf(o.coverId));else{x.fillStyle=soft;x.fillRect(0,0,S,BT)}}
     const C={eye:lt?mut:"#fff",title:lt?acc:"#fff",meta:lt?mut:"#fff",lab:lt?acc:"#fff",nm:lt?ink:"#fff"},range=pbRange(t.start,t.end),who=t.people.map(p=>p.name).join(" · ");
@@ -778,7 +802,7 @@ async function pbDraw(t,pg,S,o,cover){
     let fz=o.couple?8:(lt?7.6:8.5),r=rows(fz);const fits=()=>{F(fz,800);return pbLines(x,t.name,W,3).length<=2&&(lt?hOf(r)<=bot-BT-2*pad:true)};
     while(fz>6&&!fits()){fz-=.2;r=rows(fz)}
     let y=lt?BT+pad+Math.max(0,(bot-BT-2*pad-hOf(r))/2):Math.min(bot-hOf(r),S*.62);
-    for(const q of r){q.f();x.fillStyle=q.c;x.globalAlpha=q.a||1;for(const line of q.t){x.fillText(line,m,y);y+=q.lh}x.globalAlpha=1;y+=q.gap||0}
+    for(const q of r){q.f();x.fillStyle=q.c;x.globalAlpha=q.a||1;for(const line of q.t){x.fillText(line,mL,y);y+=q.lh}x.globalAlpha=1;y+=q.gap||0}
     if(o.couple)return await new Promise(res=>c.toBlob(b=>res(b),"image/jpeg",.9));
   }else if(pg.type==="day"){
     x.fillStyle=soft;x.fillRect(0,0,S,S);x.fillStyle=acc;x.fillRect(0,0,S,S*.012);
@@ -958,7 +982,11 @@ function photobookModal(){const t=T;if(!t)return;
       <div class="grid2">${["a","b"].map((k,j)=>`<div class="field"><label>${j?"오른쪽":"왼쪽"}</label><div class="row" style="flex-wrap:nowrap;gap:6px"><input class="inp" id="pb-l${k}" value="${j?"His":"Her"}" style="width:64px"><select class="inp" id="pb-p${k}">${t.people.map((p,i)=>`<option value="${p.id}" ${i===j?"selected":""}>${esc(p.name)}</option>`).join("")}</select></div></div>`).join("")}</div>
       <div class="field"><label for="pb-line">표지 한 줄 (선택)</label><input class="inp" id="pb-line" placeholder="예: 우리의 세 번째 여행 · D+1000"></div><p class="warnline" id="pbCplWarn" hidden></p></div>`:""}
     <div class="field"><label for="pb-r">롤링페이퍼 모양</label><select class="inp" id="pb-r"><option value="ring">가운데 이름 + 둘레 쪽지</option><option value="bubble">말풍선 메시지</option><option value="stamp">우표 엽서</option><option value="card">편지 카드 + 마스킹테이프</option><option value="note">포스트잇</option></select></div>
-    <div class="field" id="pbSpineBox" hidden><label for="pb-spine">책등 두께 (인치) <span class="hint" id="pbSpineInfo"></span></label><input class="inp mono" id="pb-spine" inputmode="decimal" placeholder="예: 0.056" style="max-width:140px">
+    <div class="field" id="pbSpineBox" hidden>
+      <label>Blurb 표지</label><div class="seg" role="group" id="pb-cover" style="margin-bottom:8px">${[["soft","소프트커버"],["hard","하드커버"]].map(([k,n])=>`<button type="button" data-v="${k}" aria-pressed="${bCover()===k}">${n}</button>`).join("")}</div>
+      <label>Blurb 종이</label><div class="seg" role="group" id="pb-paper">${Object.keys(BPAPER).map(k=>`<button type="button" data-v="${k}" aria-pressed="${bPaper()===k}">${k==="std"?"Standard":"Premium"}</button>`).join("")}</div>
+      <p class="warnline" id="pbBlurbWarn" style="margin:8px 0 4px"></p><p class="hint" id="pbPrice" style="margin:0 0 10px"></p>
+      <label for="pb-spine">책등 두께 (인치) <span class="hint" id="pbSpineInfo"></span></label><input class="inp mono" id="pb-spine" inputmode="decimal" placeholder="예: 0.056" style="max-width:140px">
       <p class="hint" id="pbSpineHelp"></p></div>
     <div class="field"><label for="pb-1">사진 한 장 페이지</label><select class="inp" id="pb-1"><option value="pola">폴라로이드 + 스티커</option><option value="full">꽉 채우기</option></select></div>
     <label class="row" style="gap:8px"><input type="checkbox" id="pb-s" checked> 스티커 붙이기 <span class="hint">(롤링페이퍼 · 폴라로이드, 여행 이모지로 자동)</span></label>
@@ -998,11 +1026,16 @@ function photobookModal(){const t=T;if(!t)return;
     catch(e){PB_BLURB=false;console.error(e);out.textContent="미리보기를 만들지 못했어요."}b.disabled=false};
   const spineUpd=()=>{const box=m.querySelector("#pbSpineBox");const on=m.querySelector("#pb-f").value==="blurb";box.hidden=!on;if(!on)return;
     const o0=(typeof readO==="function"&&readO({textContent:""}))||{text:m.querySelector("#pb-t").checked,priv:m.querySelector("#pb-p").checked,roll:m.querySelector("#pb-r").value,stk:true,single:"pola",...(()=>{const c=cvSel();return {coverId:c.id,withPg:c.withPg}})()};
-    const n=blurbPages(pbPlan(t,o0)).length;m._bn=n;const v=BLURB.spine(n);const inp=m.querySelector("#pb-spine");
+    const n=blurbPages(pbPlan(t,o0)).length;m._bn=n;const pp=bPaper();const v=BLURB.spine(n,pp);const inp=m.querySelector("#pb-spine");
+    const ck=bCover();m.querySelectorAll("#pb-paper button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===pp)));m.querySelectorAll("#pb-cover button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===ck)));
+    m.querySelector("#pbBlurbWarn").innerHTML=EN()?`⚠️ In Blurb, choose <b>Small Square · ${bCoverName(ck)} · Paper: ${bPaperName(pp)}</b>. Other papers (Pearl, Eggshell) or a different cover type won't fit this cover.`:`⚠️ Blurb에서 꼭 <b>Small Square · ${ck==="hard"?"Hardcover, ImageWrap":"Softcover"} · 종이 ${bPaperName(pp)}</b>를 고르세요. 다른 종이(Pearl, Eggshell)나 다른 표지를 고르면 표지 크기가 안 맞아요.`;
+    m.querySelector("#pbPrice").innerHTML=blurbPriceLine(n,pp);
     m.querySelector("#pbSpineInfo").textContent=EN()?`· this book: ${n} pages`:`· 이 책: ${n}쪽`;
-    if(v!=null&&(!inp.dataset.n||inp.dataset.n!=String(n)||!inp.value))inp.value=v;inp.dataset.n=n;
-    m.querySelector("#pbSpineHelp").innerHTML=BLURB.known[n]!=null?(EN()?"Checked value — you can leave it.":"확인된 값이에요. 그대로 두면 돼요."):(EN()?`Open <a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb's calculator</a>, pick Small Square · Softcover · Standard · ${n} pages, and enter the "Gutter / Spine" width. Without it, only the interior PDF is made.`:`<a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb 계산기</a>에서 Small Square · Softcover · Standard · ${n}쪽을 넣고, "Gutter / Spine"의 앞 숫자를 적어 주세요. 비워 두면 속지만 만들어요.`)};
-  ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});setTimeout(()=>{cvShow();spineUpd()},0);
+    if(v!=null&&(!inp.dataset.n||inp.dataset.n!=String(n)||inp.dataset.p!==pp+ck||!inp.value))inp.value=v;else if(v==null&&inp.dataset.p!==pp+ck)inp.value="";inp.dataset.n=n;inp.dataset.p=pp+ck;
+    m.querySelector("#pbSpineHelp").innerHTML=BLURB.isKnown(n,pp)?(EN()?`Checked value for ${bCoverName(ck).toLowerCase()} · ${bPaperName(pp)} — you can leave it.`:`${bCoverName(ck)} · ${bPaperName(pp)} 기준으로 확인된 값이에요. 그대로 두면 돼요.`):(EN()?`Open <a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb's calculator</a>, pick Small Square · ${ck==="hard"?"Hardcover, ImageWrap":"Softcover"} · ${bPaperName(pp)} · ${n} pages, and enter the "Gutter / Spine" width. Without it, only the interior PDF is made.`:`<a href="https://www.blurb.com/make/pdf_to_book/booksize_calculator" target="_blank" rel="noopener">Blurb 계산기</a>에서 Small Square · ${ck==="hard"?"Hardcover, ImageWrap":"Softcover"} · ${bPaperName(pp)} · ${n}쪽을 넣고, "Gutter / Spine"의 앞 숫자를 적어 주세요. 비워 두면 속지만 만들어요.`)};
+  ["#pb-f","#pb-t","#pb-p","#pb-r","#pb-d"].forEach(q=>{const el=m.querySelector(q);if(el)el.addEventListener("change",spineUpd)});
+  m.querySelector("#pb-cover").onclick=ev=>{const b=ev.target.closest("button[data-v]");if(!b)return;prefs.pbCover=b.dataset.v;savePrefs();spineUpd()};
+  m.querySelector("#pb-paper").onclick=ev=>{const b=ev.target.closest("button[data-v]");if(!b)return;prefs.pbPaper=b.dataset.v;savePrefs();spineUpd()};setTimeout(()=>{cvShow();spineUpd()},0);
   const dSel=m.querySelector("#pb-d");
   // 커플 디자인인데 한 사람 사진이 이 폰에 하나도 없으면 먼저 사진 모으기를 안내(11/05)
   const cplWarn=()=>{const wEl=m.querySelector("#pbCplWarn");if(!wEl||!dSel||dSel.value!=="couple"){if(wEl)wEl.hidden=true;return}
@@ -1014,16 +1047,16 @@ function photobookModal(){const t=T;if(!t)return;
     try{flushAll();let pl=pbPlan(t,o);if(fmt==="blurb")pl=blurbPages(pl);const cover=o.coverId?await pbImage(o.coverId,o.orig):null;o.withImg=o.withPg?await pbImage(L.cover,o.orig):null;const res=[];
       PB_BLURB=fmt==="blurb";
       try{for(let k=0;k<pl.length;k++){out.textContent=`${k+1} / ${pl.length}쪽 만드는 중…`;let blob=await pbDraw(t,pl[k],S,o,cover);if(fmt==="blurb")blob=await gutterShift(blob,S,k%2===0?1:-1);res.push({blob,w:S,h:S})}}finally{PB_BLURB=false}
-      let bc=null;if(fmt==="blurb"){const si=m.querySelector("#pb-spine");const sv=si.dataset.n===String(pl.length)?parseFloat(si.value):BLURB.spine(pl.length);
-        if(sv>0&&sv<3){if(BLURB.known[pl.length]==null){prefs.spines=Object.assign(prefs.spines||{},{[pl.length]:sv});savePrefs()}
+      let bc=null;if(fmt==="blurb"){const si=m.querySelector("#pb-spine");const pp=bPaper();const sv=si.dataset.n===String(pl.length)?parseFloat(si.value):BLURB.spine(pl.length,pp);
+        if(sv>0&&sv<3){if(!BLURB.isKnown(pl.length,pp)){prefs.spines=Object.assign(prefs.spines||{},{[(bCover()==="hard"?"hard:":"")+pp+":"+pl.length]:sv});savePrefs()}
           out.textContent=EN()?"Making the cover…":"표지 만드는 중…";PB_BLURB=true;try{bc=await blurbCover(t,o,cover,pl.length,sv);bc.sp=sv}finally{PB_BLURB=false}}}
       cover&&cover.close&&cover.close();o.withImg&&o.withImg.close&&o.withImg.close();const day=t.start||todayISO();
       if(fmt==="blurb"){const pdf=await pdfFromJpegs(res,BLURB.pt);const cpdf=bc?await pdfFromJpegs([bc],BLURB.pt):null;
         const nMemo=pl.filter(p=>p.type==="memo").length,blank=pl.some(p=>p.type==="blank");
         out.innerHTML=`<div class="bf1"></div><div class="bf2"></div>`;
         offerFile(out.querySelector(".bf1"),pdf,`gotripj-blurb-interior-${day}.pdf`,EN()?`① Interior · ${pl.length} pages · 6.875×6.875 in (with bleed).`+(nMemo?` Added ${nMemo} memo pages to reach the 20-page minimum.`:"")+(blank?" Added 1 blank page at the end to make the page count even.":""):`① 속지 ${pl.length}쪽 · 6.875×6.875인치(재단 여유 포함).`+(nMemo?` 최소 20쪽을 채우려고 메모 페이지 ${nMemo}쪽을 넣었어요.`:"")+(blank?" 쪽수를 짝수로 맞추려고 맨 뒤에 빈 페이지 1쪽을 넣었어요.":""));
-        if(cpdf)offerFile(out.querySelector(".bf2"),cpdf,`gotripj-blurb-cover-${day}.pdf`,EN()?`② Cover · ${bc.Win} × 6.875 in (spine ${bc.sp} in). Softcover · Standard paper only. Before ordering, enter ${pl.length} pages in Blurb's calculator and check the cover is ${bc.Win} in wide.`:`② 표지 ${bc.Win} × 6.875인치 (책등 ${bc.sp}인치). 소프트커버 · 기본 용지 전용이에요. 주문 전에 Blurb 계산기에 ${pl.length}쪽을 넣어 표지 크기가 ${bc.Win}인치인지 한 번 확인하세요.`);else out.querySelector(".bf2").innerHTML=`<p class="warnline">${EN()?`② The cover wasn't made because the spine width is missing. Enter the "Gutter / Spine" value for ${pl.length} pages from Blurb's calculator above and tap Make again.`:`② 책등 두께가 없어서 표지는 만들지 않았어요. 위 칸에 Blurb 계산기의 ${pl.length}쪽 "Gutter / Spine" 값을 넣고 다시 만들기를 눌러 주세요.`}</p>`;
-        out.insertAdjacentHTML("beforeend",printHelpHTML("blurb",pl.length))}
+        if(cpdf)offerFile(out.querySelector(".bf2"),cpdf,`gotripj-blurb-cover-${day}.pdf`,EN()?`② Cover · ${bc.Win} × ${bc.Hin||6.875} in (spine ${bc.sp} in). ${bCoverName()} · ${bPaperName(bPaper())} paper only. Before ordering, enter ${pl.length} pages in Blurb's calculator and check the cover is ${bc.Win} in wide.`:`② 표지 ${bc.Win} × ${bc.Hin||6.875}인치 (책등 ${bc.sp}인치). ${bCoverName()} · 종이 ${bPaperName(bPaper())} 전용이에요. 주문 전에 Blurb 계산기에 ${pl.length}쪽을 넣어 표지 크기가 ${bc.Win}인치인지 한 번 확인하세요.`);else out.querySelector(".bf2").innerHTML=`<p class="warnline">${EN()?`② The cover wasn't made because the spine width is missing. Enter the "Gutter / Spine" value for ${pl.length} pages from Blurb's calculator above and tap Make again.`:`② 책등 두께가 없어서 표지는 만들지 않았어요. 위 칸에 Blurb 계산기의 ${pl.length}쪽 "Gutter / Spine" 값을 넣고 다시 만들기를 눌러 주세요.`}</p>`;
+        out.insertAdjacentHTML("beforeend",printHelpHTML("blurb",pl.length,bPaper()))}
       else if(fmt==="pdf"){const pdf=await pdfFromJpegs(res,576);offerFile(out,pdf,`gotripj-${o.couple?"couple-":""}photobook-${day}.pdf`,`${pl.length}쪽 · 8×8 인치. 인쇄할 때는 '8×8 정사각, 여백 없음'으로 맡기세요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("pdf",pl.length))}
       else{const z=await makeZip(res.map((r,k)=>({name:`page-${String(k+1).padStart(2,"0")}.jpg`,blob:r.blob})));offerFile(out,z,`gotripj-photobook-pages-${day}.zip`,`${pl.length}장. 8×8 사진첩을 만들고 한 쪽에 한 장씩 '꽉 채우기'로 넣으면 이 모양 그대로 나와요.`);out.insertAdjacentHTML("beforeend",printHelpHTML("jpg",pl.length))}
     }catch(e){console.error(e);out.textContent="사진첩을 만들지 못했어요. 화질을 '보기·공유용'으로 바꿔 다시 해 보세요."}
