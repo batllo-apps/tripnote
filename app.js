@@ -794,8 +794,8 @@ async function pbDraw(t,pg,S,o,cover){
         r.push({f:()=>F(fz,800),t:tl,lh:fz*1.15*u,c:C.title,gap:1.5*u},{f:()=>F(3.2,500),t:[range],lh:5*u,c:C.meta});if(cp.line)r.push({f:()=>F(3.2,400),t:[pbLines(x,cp.line,W,1)[0]],lh:4.5*u,c:C.meta,a:.9})}
       else{if(t.destination)r.push({f:()=>F(3.2,600),t:[(()=>{F(3.2,600);return pbLines(x,t.destination.toUpperCase(),W,1)[0]})()],lh:5*u,c:C.eye,a:lt?1:.85});
         r.push({f:()=>F(fz,800),t:tl,lh:fz*1.15*u,c:C.title,gap:1.5*u});
-        if(lt){F(3.4,500);r.push({f:()=>F(3.4,500),t:[pbLines(x,who?`${range}   ·   ${who}`:range,W,1)[0]],lh:5.2*u,c:C.meta})}
-        else{r.push({f:()=>F(3.4,500),t:[range],lh:5.2*u,c:C.meta});if(who)r.push({f:()=>F(3.4,400),t:[(()=>{F(3.4,400);return pbLines(x,who,W,1)[0]})()],lh:5*u,c:C.meta})}}
+        if(lt){F(3.4,500);r.push({f:()=>F(3.4,500),t:[pbLines(x,who?`${range}   ·   with ${who}`:range,W,1)[0]],lh:5.2*u,c:C.meta})}
+        else{r.push({f:()=>F(3.4,500),t:[range],lh:5.2*u,c:C.meta});if(who)r.push({f:()=>F(3.4,400),t:[(()=>{F(3.4,400);return pbLines(x,`with ${who}`,W,1)[0]})()],lh:5*u,c:C.meta})}}
       return r};
     const hOf=r=>r.reduce((a,q)=>a+q.t.length*q.lh+(q.gap||0),0),bot=PB_BLURB?S-m*1.1:S-m,pad=4*u;
     // 긴 제목은 글씨를 조금씩 줄여서 다 들어가게(6% 아래로는 안 줄이고 그때만 …)
